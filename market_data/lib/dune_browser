@@ -1,0 +1,7 @@
+(library
+ (public_name ocamlot.market_data_browser)
+ (name ocamlot_market_data_browser)
+ (libraries base)
+ (modules browser_feed)
+ (preprocess
+  (pps ppx_deriving.show)))

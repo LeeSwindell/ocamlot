@@ -3,4 +3,4 @@
  (name ocamlot_common)
  (libraries base core lwt yojson)
  (preprocess
-  (pps lwt_ppx ppx_deriving.show)))
+  (pps lwt_ppx ppx_deriving.show ppx_deriving_yojson)))

@@ -29,6 +29,9 @@ module ClientState = struct
   let max_history_length = 100
   let is_connected = ref false
   let auto_scroll = ref true
+  let simulation_running = ref false
+  let generation_timer_id = ref None
+  let active_profiles = ref default_profiles
   
   (* Helper function to take first n elements from a list *)
   let rec take n lst =
@@ -37,13 +40,23 @@ module ClientState = struct
       | [] -> []
       | x :: xs -> x :: take (n - 1) xs
   
-  let add_market_data data =
+  let add_market_data (data : web_market_data) =
     market_data_history := data :: !market_data_history;
     if List.length !market_data_history > max_history_length then
       market_data_history := take max_history_length !market_data_history
       
   let get_latest_data limit =
     take (min limit (List.length !market_data_history)) !market_data_history
+    
+  let start_simulation () =
+    simulation_running := true;
+    console_log "Starting browser-native market data simulation"
+    
+  let stop_simulation () =
+    simulation_running := false;
+    console_log "Stopping browser-native market data simulation"
+    
+  let is_simulation_running () = !simulation_running
 end
 
 (* Market data display functions *)
@@ -63,7 +76,7 @@ let get_price_trend_class prev_price current_price =
   else if current_price < prev_price then "price-down"
   else "price-unchanged"
 
-let create_market_data_row data trend_class =
+let create_market_data_row (data : web_market_data) trend_class =
   let row = create_element "tr" in
   row##.className := Js.string ("market-data-row " ^ trend_class);
   
@@ -92,7 +105,7 @@ let update_market_data_display () =
     tbody##.innerHTML := Js.string "";
     
     (* Get latest data and display *)
-    let latest_data = ClientState.get_latest_data 50 in
+    let latest_data : web_market_data list = ClientState.get_latest_data 50 in
     List.iteri (fun index data ->
       let trend_class = 
         if index > 0 then
@@ -139,6 +152,41 @@ let handle_websocket_message message_text =
   | _ ->
     console_log "Received unknown message type"
 
+(* Browser-native market data generation *)
+let generate_and_display_data () =
+  if ClientState.is_simulation_running () then (
+    (* Initialize market state if not already done *)
+    initialize_market_state !ClientState.active_profiles;
+    
+    (* Generate market data for all active profiles *)
+    let market_snapshot = generate_market_snapshot !ClientState.active_profiles in
+    
+    (* Add to history (data is already in web format) *)
+    List.iter (fun web_data ->
+      ClientState.add_market_data web_data
+    ) market_snapshot;
+    
+    (* Update display *)
+    update_market_data_display ()
+  )
+
+let start_generation_loop () =
+  let rec loop () =
+    generate_and_display_data ();
+    let timer_id = Dom_html.window##setTimeout 
+      (Js.wrap_callback (fun () -> loop ())) 
+      (Js.number_of_float 100.0) in (* 100ms interval *)
+    ClientState.generation_timer_id := Some timer_id
+  in
+  loop ()
+
+let stop_generation_loop () =
+  match !ClientState.generation_timer_id with
+  | Some timer_id ->
+    Dom_html.window##clearTimeout timer_id;
+    ClientState.generation_timer_id := None
+  | None -> ()
+
 let connect_websocket () =
   let protocol = if Js.to_string Dom_html.window##.location##.protocol = "https:" then "wss" else "ws" in
   let host = Js.to_string Dom_html.window##.location##.host in
@@ -171,22 +219,21 @@ let connect_websocket () =
     Js._true
   )
 
-(* Control functions *)
-let send_simulation_control action =
-  match !ClientState.websocket with
-  | Some ws when !ClientState.is_connected ->
-    let message = SimulationControl { action; parameters = [] } in
-    let json_message = message_to_json message in
-    ws##send (Js.string json_message)
-  | _ ->
-    console_error "WebSocket not connected"
+(* Control functions - WebSocket control removed, using browser-native simulation *)
 
 let setup_controls () =
   (* Start simulation button *)
   (match get_element_by_id "start-simulation" with
   | Some button ->
     button##.onclick := Dom.handler (fun _event ->
-      send_simulation_control "start";
+      ClientState.start_simulation ();
+      start_generation_loop ();
+      (* Update connection status to show simulation running *)
+      (match get_element_by_id "connection-status" with
+      | Some element ->
+        element##.className := Js.string "status simulation_started";
+        set_text_content element "Simulation Running"
+      | None -> ());
       Js._true
     )
   | None -> ());
@@ -195,7 +242,14 @@ let setup_controls () =
   (match get_element_by_id "stop-simulation" with
   | Some button ->
     button##.onclick := Dom.handler (fun _event ->
-      send_simulation_control "stop";
+      ClientState.stop_simulation ();
+      stop_generation_loop ();
+      (* Update connection status to show simulation stopped *)
+      (match get_element_by_id "connection-status" with
+      | Some element ->
+        element##.className := Js.string "status simulation_stopped";
+        set_text_content element "Simulation Stopped"
+      | None -> ());
       Js._true
     )
   | None -> ());
@@ -214,20 +268,23 @@ let setup_controls () =
 let init () =
   console_log "OCamlot Market Data Dashboard initializing...";
   
+  (* Initialize market data generation *)
+  set_random_seed 42; (* Deterministic for testing *)
+  
   (* Setup initial UI state *)
   (match get_element_by_id "connection-status" with
   | Some element -> 
-    set_text_content element "Disconnected";
-    element##.className := Js.string "status disconnected"
+    set_text_content element "Ready";
+    element##.className := Js.string "status connected"
   | None -> ());
   
   (* Setup controls *)
   setup_controls ();
   
-  (* Connect to WebSocket *)
+  (* Note: WebSocket connection maintained for future control/coordination features *)
   connect_websocket ();
   
-  console_log "OCamlot Market Data Dashboard initialized"
+  console_log "OCamlot Market Data Dashboard initialized (Browser-Native Mode)"
 
 (* Start the application when the DOM is ready *)
 let () =

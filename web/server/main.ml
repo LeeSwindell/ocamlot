@@ -33,30 +33,23 @@ module State = struct
     ) !active_connections
 end
 
-(* Market data generation with WebSocket broadcasting *)
+(* Market data generation using unified library *)
+module Feed = Ocamlot_market_data.Feed
+
+let market_profiles = ref Feed.default_profiles
+let market_initialized = ref false
+
+let initialize_server_market_data () =
+  if not !market_initialized then (
+    Feed.set_random_seed 123; (* Different seed from client for variety *)
+    Feed.initialize_market_state !market_profiles;
+    market_initialized := true
+  )
+
 let generate_sample_market_data () =
-  let instruments = ["AAPL"; "GOOGL"; "MSFT"; "TSLA"; "AMZN"] in
-  let current_time = Unix.time () in
-  
-  List.map (fun symbol ->
-    let base_price = match symbol with
-      | "AAPL" -> 150.0
-      | "GOOGL" -> 2800.0 
-      | "MSFT" -> 300.0
-      | "TSLA" -> 800.0
-      | "AMZN" -> 3200.0
-      | _ -> 100.0
-    in
-    let variation = (Random.float 0.04) -. 0.02 in (* +/- 2% variation *)
-    let price = base_price *. (1.0 +. variation) in
-    create_market_data
-      ~instrument_id:symbol
-      ~bid:(price -. 0.05)
-      ~ask:(price +. 0.05)
-      ~last_price:price
-      ~volume:(Random.float 10000.0)
-      ~timestamp:current_time
-  ) instruments
+  initialize_server_market_data ();
+  let market_snapshot = Feed.generate_market_snapshot !market_profiles in
+  List.map Web_types.market_data_to_web market_snapshot
 
 (* WebSocket handler *)
 let websocket_handler _request =
