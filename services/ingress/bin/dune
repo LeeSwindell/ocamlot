@@ -1,0 +1,6 @@
+(executable
+ (public_name ocamlot-ingress)
+ (name main)
+ (libraries base core lwt lwt.unix yojson logs logs.fmt fmt ocamlot_common ocamlot_core ocamlot_oms)
+ (preprocess
+  (pps lwt_ppx)))

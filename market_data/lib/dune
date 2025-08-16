@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.market_data)
+ (name ocamlot_market_data)
+ (libraries base core lwt lwt.unix yojson mtime ocamlot_common)
+ (preprocess
+  (pps lwt_ppx ppx_deriving.show)))

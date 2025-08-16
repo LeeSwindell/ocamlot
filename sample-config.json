@@ -1,0 +1,10 @@
+{
+  "symbols": [ "AAPL", "GOOGL", "MSFT", "TSLA" ],
+  "frequency_ms": 100,
+  "tick_format": { "type": "simple", "price": 100.0 },
+  "generation_style": {
+    "type": "random_walk",
+    "step_size": 0.1,
+    "volatility": 0.02
+  }
+}

@@ -1,0 +1,5 @@
+(test
+ (name test_oms)
+ (libraries base core lwt alcotest alcotest-lwt ocamlot_common ocamlot_core ocamlot_oms)
+ (preprocess
+  (pps lwt_ppx)))

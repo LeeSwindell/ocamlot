@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.fix)
+ (name ocamlot_fix)
+ (libraries base core lwt yojson ocamlot_common)
+ (preprocess
+  (pps lwt_ppx ppx_deriving.show)))

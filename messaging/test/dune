@@ -1,0 +1,5 @@
+(test
+ (name test_messaging)
+ (libraries base core lwt alcotest alcotest-lwt ocamlot_common ocamlot_messaging)
+ (preprocess
+  (pps lwt_ppx)))

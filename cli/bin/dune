@@ -1,0 +1,6 @@
+(executable
+ (public_name ocamlot)
+ (name main)
+ (libraries base core lwt cmdliner logs logs.fmt fmt ocamlot_common ocamlot_core ocamlot_oms ocamlot_market_data ocamlot_sim)
+ (preprocess
+  (pps lwt_ppx)))

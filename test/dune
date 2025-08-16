@@ -1,0 +1,5 @@
+(test
+ (name test_integration)
+ (libraries base core lwt alcotest alcotest-lwt ocamlot_common ocamlot_core ocamlot_oms ocamlot_market_data ocamlot_risk ocamlot_sim)
+ (preprocess
+  (pps lwt_ppx)))

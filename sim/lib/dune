@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.sim)
+ (name ocamlot_sim)
+ (libraries base core lwt mtime ocamlot_common ocamlot_core ocamlot_market_data ocamlot_oms)
+ (preprocess
+  (pps lwt_ppx ppx_deriving.show)))

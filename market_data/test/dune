@@ -1,0 +1,5 @@
+(test
+ (name test_market_data)
+ (libraries base core lwt alcotest alcotest-lwt ocamlot_common ocamlot_market_data)
+ (preprocess
+  (pps lwt_ppx)))
