@@ -1,6 +1,6 @@
 (executable
  (name main)
  (modes js)
- (libraries js_of_ocaml ocamlot_web)
+ (libraries js_of_ocaml browser_types)
  (preprocess
   (pps js_of_ocaml-ppx)))

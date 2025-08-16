@@ -1,6 +1,6 @@
 (executables
- (public_names test_market_data_nats_flow)
- (names test_market_data_nats_flow)
- (libraries base lwt lwt.unix alcotest-lwt ocamlot_market_data ocamlot_nats)
+ (public_names test_market_data_nats_flow test_end_to_end_pipeline)
+ (names test_market_data_nats_flow test_end_to_end_pipeline)
+ (libraries base lwt lwt.unix alcotest-lwt ocamlot_market_data ocamlot_nats ocamlot_web)
  (preprocess
   (pps lwt_ppx)))

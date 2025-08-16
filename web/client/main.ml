@@ -1,5 +1,5 @@
 open Js_of_ocaml
-open Ocamlot_web.Web_types
+open Browser_types
 (* Use Firebug console for logging - suppress deprecation warnings *)
 [@@@warning "-3"]
 let console_log msg = Firebug.console##log (Js.string msg)
@@ -30,8 +30,6 @@ module ClientState = struct
   let is_connected = ref false
   let auto_scroll = ref true
   let simulation_running = ref false
-  let generation_timer_id = ref None
-  let active_profiles = ref default_profiles
   
   (* Helper function to take first n elements from a list *)
   let rec take n lst =
@@ -48,15 +46,13 @@ module ClientState = struct
   let get_latest_data limit =
     take (min limit (List.length !market_data_history)) !market_data_history
     
-  let start_simulation () =
+  let start_market_data () =
     simulation_running := true;
-    console_log "Starting browser-native market data simulation"
+    console_log "Starting market data via server"
     
-  let stop_simulation () =
+  let stop_market_data () =
     simulation_running := false;
-    console_log "Stopping browser-native market data simulation"
-    
-  let is_simulation_running () = !simulation_running
+    console_log "Stopping market data"
 end
 
 (* Market data display functions *)
@@ -106,7 +102,7 @@ let update_market_data_display () =
     
     (* Get latest data and display *)
     let latest_data : web_market_data list = ClientState.get_latest_data 50 in
-    List.iteri (fun index data ->
+    List.iteri (fun index (data : web_market_data) ->
       let trend_class = 
         if index > 0 then
           try
@@ -137,6 +133,24 @@ let handle_websocket_message message_text =
   | Ok (MarketDataTick data) ->
     ClientState.add_market_data data;
     update_market_data_display ()
+  | Ok (ConflatedBar bar) ->
+    console_log ("Received conflated bar for " ^ bar.instrument_id ^ " (" ^ bar.interval ^ "): OHLCV=" ^ 
+                 (Printf.sprintf "%.2f/%.2f/%.2f/%.2f/%.0f" bar.open_price bar.high_price bar.low_price bar.close_price bar.volume));
+    (* Convert conflated bar to market data tick for display *)
+    let market_tick = {
+      instrument_id = bar.instrument_id;
+      bid = bar.close_price -. 0.01;  (* Approximate bid from close price *)
+      ask = bar.close_price +. 0.01;  (* Approximate ask from close price *)
+      last_price = bar.close_price;
+      volume = bar.volume;
+      timestamp = bar.close_timestamp;
+    } in
+    ClientState.add_market_data market_tick;
+    update_market_data_display ()
+  | Ok (Analytics analytics) ->
+    console_log ("Received analytics for " ^ analytics.instrument_id ^ " at " ^ (string_of_float analytics.timestamp));
+    (* Analytics messages are informational - log but don't add to market data history *)
+    ()
   | Ok (SystemStatus { status; message }) ->
     console_log ("System status: " ^ status ^ " - " ^ message);
     (* Update connection status indicator *)
@@ -145,47 +159,37 @@ let handle_websocket_message message_text =
       element##.className := Js.string ("status " ^ status);
       set_text_content element (String.capitalize_ascii status)
     | None -> ())
+  | Ok (SimulationControl _) ->
+    console_log "Received simulation control message"
   | Ok (Error { error; details }) ->
     console_error ("WebSocket error: " ^ error ^ " - " ^ details)
   | Error err ->
     console_error ("Failed to parse WebSocket message: " ^ err)
-  | _ ->
-    console_log "Received unknown message type"
 
-(* Browser-native market data generation *)
-let generate_and_display_data () =
-  if ClientState.is_simulation_running () then (
-    (* Initialize market state if not already done *)
-    initialize_market_state !ClientState.active_profiles;
-    
-    (* Generate market data for all active profiles *)
-    let market_snapshot = generate_market_snapshot !ClientState.active_profiles in
-    
-    (* Add to history (data is already in web format) *)
-    List.iter (fun web_data ->
-      ClientState.add_market_data web_data
-    ) market_snapshot;
-    
-    (* Update display *)
-    update_market_data_display ()
-  )
+(* WebSocket control functions *)
+let send_websocket_message msg =
+  match !ClientState.websocket with
+  | Some ws -> 
+    let json_msg = message_to_json msg in
+    ws##send (Js.string json_msg)
+  | None -> 
+    console_error "WebSocket not connected"
 
-let start_generation_loop () =
-  let rec loop () =
-    generate_and_display_data ();
-    let timer_id = Dom_html.window##setTimeout 
-      (Js.wrap_callback (fun () -> loop ())) 
-      (Js.number_of_float 100.0) in (* 100ms interval *)
-    ClientState.generation_timer_id := Some timer_id
-  in
-  loop ()
+let start_market_data_via_websocket () =
+  let control_msg = SimulationControl { 
+    action = "start"; 
+    parameters = [] 
+  } in
+  send_websocket_message control_msg;
+  ClientState.start_market_data ()
 
-let stop_generation_loop () =
-  match !ClientState.generation_timer_id with
-  | Some timer_id ->
-    Dom_html.window##clearTimeout timer_id;
-    ClientState.generation_timer_id := None
-  | None -> ()
+let stop_market_data_via_websocket () =
+  let control_msg = SimulationControl { 
+    action = "stop"; 
+    parameters = [] 
+  } in
+  send_websocket_message control_msg;
+  ClientState.stop_market_data ()
 
 let connect_websocket () =
   let protocol = if Js.to_string Dom_html.window##.location##.protocol = "https:" then "wss" else "ws" in
@@ -219,36 +223,34 @@ let connect_websocket () =
     Js._true
   )
 
-(* Control functions - WebSocket control removed, using browser-native simulation *)
+(* Control functions - WebSocket-based market data control *)
 
 let setup_controls () =
-  (* Start simulation button *)
+  (* Start market data button *)
   (match get_element_by_id "start-simulation" with
   | Some button ->
     button##.onclick := Dom.handler (fun _event ->
-      ClientState.start_simulation ();
-      start_generation_loop ();
-      (* Update connection status to show simulation running *)
+      start_market_data_via_websocket ();
+      (* Update connection status to show market data starting *)
       (match get_element_by_id "connection-status" with
       | Some element ->
-        element##.className := Js.string "status simulation_started";
-        set_text_content element "Simulation Running"
+        element##.className := Js.string "status starting";
+        set_text_content element "Starting Market Data"
       | None -> ());
       Js._true
     )
   | None -> ());
   
-  (* Stop simulation button *)
+  (* Stop market data button *)
   (match get_element_by_id "stop-simulation" with
   | Some button ->
     button##.onclick := Dom.handler (fun _event ->
-      ClientState.stop_simulation ();
-      stop_generation_loop ();
-      (* Update connection status to show simulation stopped *)
+      stop_market_data_via_websocket ();
+      (* Update connection status to show market data stopping *)
       (match get_element_by_id "connection-status" with
       | Some element ->
-        element##.className := Js.string "status simulation_stopped";
-        set_text_content element "Simulation Stopped"
+        element##.className := Js.string "status stopping";
+        set_text_content element "Stopping Market Data"
       | None -> ());
       Js._true
     )
@@ -268,9 +270,6 @@ let setup_controls () =
 let init () =
   console_log "OCamlot Market Data Dashboard initializing...";
   
-  (* Initialize market data generation *)
-  set_random_seed 42; (* Deterministic for testing *)
-  
   (* Setup initial UI state *)
   (match get_element_by_id "connection-status" with
   | Some element -> 
@@ -281,10 +280,10 @@ let init () =
   (* Setup controls *)
   setup_controls ();
   
-  (* Note: WebSocket connection maintained for future control/coordination features *)
+  (* Connect to WebSocket for market data *)
   connect_websocket ();
   
-  console_log "OCamlot Market Data Dashboard initialized (Browser-Native Mode)"
+  console_log "OCamlot Market Data Dashboard initialized (WebSocket Mode)"
 
 (* Start the application when the DOM is ready *)
 let () =

@@ -1,6 +1,7 @@
 open Lwt.Syntax
 module Web_types = Ocamlot_web.Web_types
 open Web_types
+module Nats_bridge = Ocamlot_web.Nats_bridge
 
 (* Helper to create WebSocket error messages *)
 let websocket_error ~error ~details : websocket_message = Error { error; details }
@@ -9,6 +10,8 @@ let websocket_error ~error ~details : websocket_message = Error { error; details
 module State = struct
   let active_connections = ref []
   let simulation_running = ref false
+  let nats_mode = ref true  (* Use NATS bridge by default *)
+  let nats_bridge = ref None
   let market_data_stats = ref {
     total_ticks = 0;
     ticks_per_second = 0.0;
@@ -31,6 +34,43 @@ module State = struct
       with
       | _ -> () (* Connection might be closed *)
     ) !active_connections
+  
+  (* NATS bridge management *)
+  let start_nats_bridge () =
+    if Option.is_none !nats_bridge then (
+      let message_callback msg = 
+        broadcast_to_all msg;
+        Lwt.return_unit
+      in
+      let error_callback err =
+        let error_msg : websocket_message = Error { error = "nats_bridge_error"; details = err } in
+        broadcast_to_all error_msg;
+        Lwt.return_unit
+      in
+      
+      let bridge = Nats_bridge.create_bridge 
+        ~config:Nats_bridge.default_config
+        ~message_callback
+        ~error_callback
+      in
+      
+      nats_bridge := Some bridge;
+      Nats_bridge.start_bridge bridge
+    ) else 
+      Lwt.return_unit
+  
+  let stop_nats_bridge () =
+    match !nats_bridge with
+    | Some bridge -> 
+      let* () = Nats_bridge.stop_bridge bridge in
+      nats_bridge := None;
+      Lwt.return_unit
+    | None -> Lwt.return_unit
+  
+  let get_nats_status () =
+    match !nats_bridge with
+    | Some bridge -> Some (Nats_bridge.get_bridge_status bridge)
+    | None -> None
 end
 
 (* Market data generation using unified library *)
@@ -71,18 +111,54 @@ let websocket_handler _request =
       | Ok (SimulationControl { action; parameters = _ }) ->
         (match action with
         | "start" ->
-          State.simulation_running := true;
+          if !State.nats_mode then (
+            let* () = State.start_nats_bridge () in
+            let response = SystemStatus { 
+              status = "nats_bridge_started"; 
+              message = "NATS bridge started - receiving real market data" 
+            } in
+            let* () = Dream.send websocket (message_to_json response) in
+            handle_messages ()
+          ) else (
+            State.simulation_running := true;
+            let response = SystemStatus { 
+              status = "simulation_started"; 
+              message = "Market data simulation started" 
+            } in
+            let* () = Dream.send websocket (message_to_json response) in
+            handle_messages ()
+          )
+        | "stop" ->
+          if !State.nats_mode then (
+            let* () = State.stop_nats_bridge () in
+            let response = SystemStatus { 
+              status = "nats_bridge_stopped"; 
+              message = "NATS bridge stopped" 
+            } in
+            let* () = Dream.send websocket (message_to_json response) in
+            handle_messages ()
+          ) else (
+            State.simulation_running := false;
+            let response = SystemStatus { 
+              status = "simulation_stopped"; 
+              message = "Market data simulation stopped" 
+            } in
+            let* () = Dream.send websocket (message_to_json response) in
+            handle_messages ()
+          )
+        | "nats_mode" ->
+          State.nats_mode := true;
           let response = SystemStatus { 
-            status = "simulation_started"; 
-            message = "Market data simulation started" 
+            status = "mode_changed"; 
+            message = "Switched to NATS mode" 
           } in
           let* () = Dream.send websocket (message_to_json response) in
           handle_messages ()
-        | "stop" ->
-          State.simulation_running := false;
+        | "simulation_mode" ->
+          State.nats_mode := false;
           let response = SystemStatus { 
-            status = "simulation_stopped"; 
-            message = "Market data simulation stopped" 
+            status = "mode_changed"; 
+            message = "Switched to simulation mode" 
           } in
           let* () = Dream.send websocket (message_to_json response) in
           handle_messages ()
@@ -155,6 +231,19 @@ let api_stop_simulation _request =
   Dream.respond (response_to_json response)
     ~headers:[("Content-Type", "application/json")]
 
+let api_nats_status _request =
+  let nats_status = State.get_nats_status () in
+  let response = match nats_status with
+    | Some status -> success_response 
+        ~data:(bridge_status_to_yojson status) 
+        ~message:"NATS bridge status retrieved"
+    | None -> success_response 
+        ~data:(`String "not_initialized") 
+        ~message:"NATS bridge not initialized"
+  in
+  Dream.respond (response_to_json response)
+    ~headers:[("Content-Type", "application/json")]
+
 (* Static file serving *)
 let serve_static request =
   let path = Dream.target request in
@@ -178,6 +267,7 @@ let () =
   @@ Dream.router [
     Dream.get "/ws" websocket_handler;
     Dream.get "/api/status" api_status;
+    Dream.get "/api/nats/status" api_nats_status;
     Dream.post "/api/start" api_start_simulation;
     Dream.post "/api/stop" api_stop_simulation;
     Dream.get "/**" serve_static;

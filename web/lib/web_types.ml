@@ -231,9 +231,46 @@ let web_to_market_data (data : web_market_data) : Ocamlot_market_data.Feed.marke
     timestamp = data.timestamp;
   }
 
+(* OHLCV bar data for web interface *)
+type web_ohlcv_bar = {
+  instrument_id: string;
+  interval: string;  (* "1s", "1m", "5m", etc. *)
+  open_price: float;
+  high_price: float;
+  low_price: float;
+  close_price: float;
+  volume: float;
+  vwap: float;
+  trade_count: int;
+  open_timestamp: float;
+  close_timestamp: float;
+} [@@deriving yojson, show]
+
+(* Analytics data for web interface *)
+type web_analytics = {
+  instrument_id: string;
+  timestamp: float;
+  sma_20: float option;
+  ema_20: float option;
+  rsi_14: float option;
+  volume_ratio: float option;
+  vwap: float option;
+} [@@deriving yojson, show]
+
+(* NATS bridge status *)
+type bridge_status = {
+  is_running: bool;
+  is_connected: bool;
+  connection_attempts: int;
+  active_subscriptions: int;
+  subjects: string list;
+} [@@deriving yojson, show]
+
 (* WebSocket message types *)
 type websocket_message = 
   | MarketDataTick of web_market_data
+  | ConflatedBar of web_ohlcv_bar
+  | Analytics of web_analytics
   | SystemStatus of { status: string; message: string }
   | SimulationControl of { action: string; parameters: (string * string) list }
   | Error of { error: string; details: string }

@@ -3,3 +3,7 @@
  (targets main.js)
  (deps ../client/main.bc.js)
  (action (copy %{deps} %{targets})))
+
+(install
+ (section share)
+ (files index.html style.css main.js))
