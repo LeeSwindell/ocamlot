@@ -1,0 +1,5 @@
+(rule
+ (mode promote)
+ (targets main.js)
+ (deps ../client/main.bc.js)
+ (action (copy %{deps} %{targets})))

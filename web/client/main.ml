@@ -1,7 +1,10 @@
 open Js_of_ocaml
-open Js_of_ocaml_lwt
-open Lwt.Syntax
 open Ocamlot_web.Web_types
+(* Use Firebug console for logging - suppress deprecation warnings *)
+[@@@warning "-3"]
+let console_log msg = Firebug.console##log (Js.string msg)
+let console_error msg = Firebug.console##error (Js.string msg)
+[@@@warning "+3"]
 
 (* DOM utilities *)
 let get_element_by_id id =
@@ -11,13 +14,13 @@ let create_element tag =
   Dom_html.document##createElement (Js.string tag)
 
 let append_child parent child =
-  ignore (parent##appendChild child)
+  ignore (parent##appendChild (child :> Dom.node Js.t))
 
-let set_inner_html element html =
+let _set_inner_html element html =
   element##.innerHTML := Js.string html
 
 let set_text_content element text =
-  element##.textContent := Some (Js.string text)
+  element##.textContent := Js.some (Js.string text)
 
 (* Global state for the client *)
 module ClientState = struct
@@ -56,8 +59,8 @@ let format_timestamp timestamp =
   Printf.sprintf "%02d:%02d:%02d.%03d" hours minutes seconds milliseconds
 
 let get_price_trend_class prev_price current_price =
-  if Float.(current_price > prev_price) then "price-up"
-  else if Float.(current_price < prev_price) then "price-down"
+  if current_price > prev_price then "price-up"
+  else if current_price < prev_price then "price-down"
   else "price-unchanged"
 
 let create_market_data_row data trend_class =
@@ -107,12 +110,13 @@ let update_market_data_display () =
     ) latest_data;
     
     (* Auto-scroll to top if enabled *)
-    if !ClientState.auto_scroll then
+    if !ClientState.auto_scroll then (
       match get_element_by_id "market-data-container" with
-      | Some container -> container##.scrollTop := 0
+      | Some container -> container##.scrollTop := Js.number_of_float 0.0
       | None -> ()
+    )
   | None ->
-    Firebug.console##log (Js.string "Market data table body not found")
+    console_log "Market data table body not found"
 
 (* WebSocket connection and message handling *)
 let handle_websocket_message message_text =
@@ -121,19 +125,19 @@ let handle_websocket_message message_text =
     ClientState.add_market_data data;
     update_market_data_display ()
   | Ok (SystemStatus { status; message }) ->
-    Firebug.console##log (Js.string ("System status: " ^ status ^ " - " ^ message));
+    console_log ("System status: " ^ status ^ " - " ^ message);
     (* Update connection status indicator *)
     (match get_element_by_id "connection-status" with
     | Some element ->
       element##.className := Js.string ("status " ^ status);
-      set_text_content element (String.capitalize status)
+      set_text_content element (String.capitalize_ascii status)
     | None -> ())
   | Ok (Error { error; details }) ->
-    Firebug.console##error (Js.string ("WebSocket error: " ^ error ^ " - " ^ details))
+    console_error ("WebSocket error: " ^ error ^ " - " ^ details)
   | Error err ->
-    Firebug.console##error (Js.string ("Failed to parse WebSocket message: " ^ err))
+    console_error ("Failed to parse WebSocket message: " ^ err)
   | _ ->
-    Firebug.console##log (Js.string "Received unknown message type")
+    console_log "Received unknown message type"
 
 let connect_websocket () =
   let protocol = if Js.to_string Dom_html.window##.location##.protocol = "https:" then "wss" else "ws" in
@@ -143,7 +147,7 @@ let connect_websocket () =
   let ws = new%js WebSockets.webSocket (Js.string ws_url) in
   
   ws##.onopen := Dom.handler (fun _event ->
-    Firebug.console##log (Js.string "WebSocket connected");
+    console_log "WebSocket connected";
     ClientState.is_connected := true;
     ClientState.websocket := Some ws;
     Js._true
@@ -156,14 +160,14 @@ let connect_websocket () =
   );
   
   ws##.onclose := Dom.handler (fun _event ->
-    Firebug.console##log (Js.string "WebSocket disconnected");
+    console_log "WebSocket disconnected";
     ClientState.is_connected := false;
     ClientState.websocket := None;
     Js._true
   );
   
   ws##.onerror := Dom.handler (fun _event ->
-    Firebug.console##error (Js.string "WebSocket error");
+    console_error "WebSocket error";
     Js._true
   )
 
@@ -175,7 +179,7 @@ let send_simulation_control action =
     let json_message = message_to_json message in
     ws##send (Js.string json_message)
   | _ ->
-    Firebug.console##error (Js.string "WebSocket not connected")
+    console_error "WebSocket not connected"
 
 let setup_controls () =
   (* Start simulation button *)
@@ -198,7 +202,8 @@ let setup_controls () =
   
   (* Auto-scroll toggle *)
   (match get_element_by_id "auto-scroll-toggle" with
-  | Some checkbox ->
+  | Some element ->
+    let checkbox = (Js.Unsafe.coerce element : Dom_html.inputElement Js.t) in
     checkbox##.onchange := Dom.handler (fun _event ->
       ClientState.auto_scroll := Js.to_bool checkbox##.checked;
       Js._true
@@ -207,7 +212,7 @@ let setup_controls () =
 
 (* Initialize the application *)
 let init () =
-  Firebug.console##log (Js.string "OCamlot Market Data Dashboard initializing...");
+  console_log "OCamlot Market Data Dashboard initializing...";
   
   (* Setup initial UI state *)
   (match get_element_by_id "connection-status" with
@@ -222,7 +227,7 @@ let init () =
   (* Connect to WebSocket *)
   connect_websocket ();
   
-  Firebug.console##log (Js.string "OCamlot Market Data Dashboard initialized")
+  console_log "OCamlot Market Data Dashboard initialized"
 
 (* Start the application when the DOM is ready *)
 let () =

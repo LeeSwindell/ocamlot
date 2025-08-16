@@ -43,8 +43,6 @@ build:
 build-web: build
 	@echo "Building web components..."
 	dune build web/
-	@echo "Copying JavaScript to static directory..."
-	cp _build/default/web/client/main.js web/static/
 
 serve: build-web
 	@echo "Starting OCamlot web server on http://localhost:8080"

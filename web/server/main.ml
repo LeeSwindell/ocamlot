@@ -3,7 +3,7 @@ module Web_types = Ocamlot_web.Web_types
 open Web_types
 
 (* Helper to create WebSocket error messages *)
-let websocket_error ~error ~details = Error { error; details }
+let websocket_error ~error ~details : websocket_message = Error { error; details }
 
 (* Global state for the web server *)
 module State = struct
@@ -59,7 +59,7 @@ let generate_sample_market_data () =
   ) instruments
 
 (* WebSocket handler *)
-let websocket_handler request =
+let websocket_handler _request =
   Dream.websocket (fun websocket ->
     State.add_connection websocket;
   
@@ -175,6 +175,9 @@ let serve_static request =
 
 (* Main server setup *)
 let () =
+  (* Start the market data simulation loop in background *)
+  Lwt.async start_market_data_loop;
+  
   Dream.run
     ~interface:"0.0.0.0"
     ~port:8080
@@ -186,8 +189,3 @@ let () =
     Dream.post "/api/stop" api_stop_simulation;
     Dream.get "/**" serve_static;
   ]
-  @@ fun _request ->
-    Dream.respond ~status:`Not_Found "Not found";
-  
-  (* Start the market data simulation loop in background *)
-  Lwt.async start_market_data_loop
