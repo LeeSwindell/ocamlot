@@ -19,6 +19,13 @@ depends: [
   "alcotest"
   "alcotest-lwt"
   "ppx_deriving_yojson"
+  "js_of_ocaml"
+  "js_of_ocaml-lwt"
+  "js_of_ocaml-tyxml"
+  "tyxml"
+  "dream"
+  "websocket"
+  "websocket-lwt-unix"
   "odoc" {with-doc}
 ]
 build: [

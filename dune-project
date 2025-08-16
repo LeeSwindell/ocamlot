@@ -21,6 +21,14 @@
   cmdliner
   alcotest
   alcotest-lwt
-  ppx_deriving_yojson))
+  ppx_deriving_yojson
+  ; Web and JavaScript compilation dependencies
+  js_of_ocaml
+  js_of_ocaml-lwt
+  js_of_ocaml-tyxml
+  tyxml
+  dream
+  websocket
+  websocket-lwt-unix))
 
 (generate_opam_files true)

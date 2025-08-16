@@ -26,6 +26,10 @@ let unsubscribe = Nats_client.unsubscribe
 
 let request = Nats_client.request
 
+(* Utility functions *)
+let get_server_info = Nats_client.get_server_info
+let get_connection_config = Nats_client.get_connection_config
+
 (* Exceptions *)
 exception Client_error = Nats_client.Client_error
 exception Not_connected = Nats_client.Not_connected

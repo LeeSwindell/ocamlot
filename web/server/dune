@@ -1,0 +1,6 @@
+(executable
+ (public_name ocamlot-web-server)
+ (name main)
+ (libraries lwt lwt.unix dream ocamlot_web)
+ (preprocess
+  (pps lwt_ppx)))

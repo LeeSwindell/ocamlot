@@ -1,0 +1,155 @@
+# Docker Compose for OCamlot Trading System Local Testing
+# Provides NATS and Redis infrastructure for development and testing
+
+services:
+  # Redis - lightweight configuration for local testing
+  # Useful for caching, session storage, and future trading features
+  redis:
+    image: redis:7-alpine
+    container_name: ocamlot-redis-local
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - ocamlot-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - ocamlot-network
+
+  # NATS - core messaging infrastructure with JetStream
+  # Supports both basic pub/sub and advanced JetStream features
+  nats:
+    image: nats:2.10-alpine
+    container_name: ocamlot-nats-local
+    ports:
+      - "4222:4222"     # NATS client connections
+      - "8222:8222"     # HTTP monitoring
+      - "6222:6222"     # Cluster routing (future use)
+    command: 
+      - "--jetstream"
+      - "--store_dir=/data"
+      - "--http_port=8222"
+      - "--max_payload=1MB"
+      - "--max_connections=1000"
+      - "--max_subscriptions=1000"
+      - "--debug"
+      - "--log_file=/data/nats.log"
+    volumes:
+      - ocamlot-nats-data:/data
+    environment:
+      - NATS_CONFIG=""  # Use command line args only
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz || curl -f http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - ocamlot-network
+
+  # Optional: Redis Commander for GUI monitoring
+  # Enable with: docker-compose --profile monitoring up
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ocamlot-redis-ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - "monitoring"
+    networks:
+      - ocamlot-network
+
+  # Optional: NATS monitoring and management
+  # Provides web UI for NATS server monitoring
+  nats-surveyor:
+    image: natsio/nats-surveyor:latest
+    container_name: ocamlot-nats-monitor
+    command:
+      - "-s"
+      - "http://nats:8222"
+      - "-p"
+      - "7777"
+    ports:
+      - "7777:7777"
+    depends_on:
+      nats:
+        condition: service_healthy
+    profiles:
+      - "monitoring"
+    networks:
+      - ocamlot-network
+
+  # Optional: Grafana + Prometheus for advanced monitoring
+  # Enable with: docker-compose --profile metrics up
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ocamlot-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ocamlot-prometheus-data:/prometheus
+    depends_on:
+      - nats
+    profiles:
+      - "metrics"
+    networks:
+      - ocamlot-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ocamlot-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - ocamlot-grafana-data:/var/lib/grafana
+      - ./config/grafana:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    profiles:
+      - "metrics"
+    networks:
+      - ocamlot-network
+
+# Named volumes for data persistence
+volumes:
+  ocamlot-redis-data:
+    driver: local
+  ocamlot-nats-data:
+    driver: local
+  ocamlot-prometheus-data:
+    driver: local
+  ocamlot-grafana-data:
+    driver: local
+
+# Custom network for service isolation and communication
+networks:
+  ocamlot-network:
+    name: ocamlot-local-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
