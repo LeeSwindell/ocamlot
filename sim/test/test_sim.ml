@@ -1,7 +1,5 @@
 open Base
-open Lwt.Syntax
 open Alcotest_lwt
-open Ocamlot_common
 open Ocamlot_sim
 
 let test_simulator_creation _switch () =

@@ -1,7 +1,5 @@
 open Base
-open Lwt.Syntax
 open Alcotest_lwt
-open Ocamlot_common
 open Ocamlot_fix
 
 let test_fix_message_encoding _switch () =
