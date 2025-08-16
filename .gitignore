@@ -269,7 +269,7 @@ logs/
 
 # NATS server files (if running locally)
 nats-server.pid
-jetstream/
+/jetstream/
 
 # Performance profiling
 *.prof

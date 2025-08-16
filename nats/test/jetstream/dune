@@ -1,0 +1,5 @@
+(test
+ (name test_jetstream)
+ (libraries base lwt alcotest alcotest-lwt ocamlot_nats)
+ (preprocess
+  (pps lwt_ppx)))
