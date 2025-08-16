@@ -121,27 +121,58 @@ and publishing_metrics = {
 (* NATS integration *)
 module NatsPublisher = struct
   type nats_connection = {
-    connection: unit; (* TODO: Replace with actual NATS connection type *)
-    stream_context: unit option;
+    client: Ocamlot_nats.Nats.client;
+    is_connected: bool ref;
   }
   
   let connect ?(timeout_ms=5000) ~host ~port () =
-    (* TODO: Implement actual NATS connection *)
-    Lwt.return (Ok { connection = (); stream_context = None })
+    try%lwt
+      let config : Ocamlot_nats.Nats.connection_config = {
+        host;
+        port;
+        connect_timeout = Float.of_int timeout_ms /. 1000.0;
+        reconnect_attempts = 3;
+        reconnect_delay = 2.0;
+      } in
+      let client = Ocamlot_nats.Nats.create ~config () in
+      let* () = Ocamlot_nats.Nats.connect client in
+      Lwt.return (Ok { 
+        client; 
+        is_connected = ref true;
+      })
+    with
+    | exn -> Lwt.return (Error (Exn.to_string exn))
   
   let publish_message nats_conn ~subject ~data =
-    (* TODO: Implement actual NATS publishing *)
-    let* () = Lwt_unix.sleep 0.001 in (* Simulate network latency *)
-    Lwt.return (Ok ())
+    try%lwt
+      if !(nats_conn.is_connected) then (
+        let* () = Ocamlot_nats.Nats.publish_string nats_conn.client ~subject data in
+        Lwt.return (Ok ())
+      ) else
+        Lwt.return (Error "NATS connection not active")
+    with
+    | exn -> 
+      nats_conn.is_connected := false;
+      Lwt.return (Error (Exn.to_string exn))
   
   let publish_to_stream nats_conn ~stream ~subject ~data =
-    (* TODO: Implement JetStream publishing *)
-    let* () = Lwt_unix.sleep 0.001 in
+    (* For now, use regular publish until JetStream is implemented *)
+    let stream_subject = Printf.sprintf "%s.%s" stream subject in
+    publish_message nats_conn ~subject:stream_subject ~data
+  
+  let create_stream _nats_conn ~name:_ ~subjects:_ ~max_age_ms:_ =
+    (* JetStream stream creation - placeholder for future implementation *)
     Lwt.return (Ok ())
   
-  let create_stream nats_conn ~name ~subjects ~max_age_ms =
-    (* TODO: Implement stream creation *)
-    Lwt.return (Ok ())
+  let disconnect nats_conn =
+    try%lwt
+      if !(nats_conn.is_connected) then (
+        nats_conn.is_connected := false;
+        Ocamlot_nats.Nats.disconnect nats_conn.client
+      ) else
+        Lwt.return_unit
+    with
+    | _ -> Lwt.return_unit
 end
 
 (* Redis integration *)
@@ -150,21 +181,22 @@ module RedisPublisher = struct
     connection: unit; (* TODO: Replace with actual Redis connection type *)
   }
   
-  let connect ?(timeout_ms=5000) ~host ~port () =
+  let connect ?(timeout_ms=5000) ~host:_ ~port:_ () =
     (* TODO: Implement actual Redis connection *)
+    ignore timeout_ms;
     Lwt.return (Ok { connection = () })
   
-  let set_string redis_conn ~key ~value ~ttl_seconds =
+  let set_string _redis_conn ~key:_ ~value:_ ~ttl_seconds:_ =
     (* TODO: Implement Redis SET *)
     let* () = Lwt_unix.sleep 0.0005 in
     Lwt.return (Ok ())
   
-  let hset redis_conn ~key ~field ~value =
+  let hset _redis_conn ~key:_ ~field:_ ~value:_ =
     (* TODO: Implement Redis HSET *)
     let* () = Lwt_unix.sleep 0.0005 in
     Lwt.return (Ok ())
   
-  let xadd redis_conn ~stream ~id ~fields =
+  let xadd _redis_conn ~stream:_ ~id:_ ~fields:_ =
     (* TODO: Implement Redis XADD for streams *)
     let* () = Lwt_unix.sleep 0.0005 in
     Lwt.return (Ok ())
@@ -194,9 +226,24 @@ let format_data_for_channel data_product channel =
 (* Generate subject/key for channel *)
 let generate_subject_key data_product channel =
   match (data_product, channel) with
-  | (RawTicks _, NATS { subject; _ }) -> subject
-  | (ConflatedBars _, NATS { subject; _ }) -> subject
-  | (Analytics _, NATS { subject; _ }) -> subject
+  | (RawTicks ticks, NATS { subject; _ }) ->
+    (match ticks with
+     | tick :: _ -> String.substr_replace_all subject ~pattern:"{symbol}" ~with_:tick.instrument_id
+     | [] -> subject)
+  
+  | (ConflatedBars bars, NATS { subject; _ }) ->
+    (match bars with
+     | bar :: _ -> 
+       let with_symbol = String.substr_replace_all subject ~pattern:"{symbol}" ~with_:bar.instrument_id in
+       let interval_str = Conflation.interval_to_string bar.interval in
+       String.substr_replace_all with_symbol ~pattern:"{interval}" ~with_:interval_str
+     | [] -> subject)
+  
+  | (Analytics analytics_list, NATS { subject; _ }) ->
+    (match analytics_list with
+     | analytics :: _ -> String.substr_replace_all subject ~pattern:"{symbol}" ~with_:analytics.instrument_id
+     | [] -> subject)
+  
   | (MarketSummary _, NATS { subject; _ }) -> subject
   | (HealthCheck _, NATS { subject; _ }) -> subject
   
@@ -207,7 +254,10 @@ let generate_subject_key data_product channel =
   
   | (ConflatedBars bars, Redis { key_pattern; _ }) ->
     (match bars with
-     | bar :: _ -> String.substr_replace_all key_pattern ~pattern:"{symbol}" ~with_:bar.instrument_id
+     | bar :: _ -> 
+       let with_symbol = String.substr_replace_all key_pattern ~pattern:"{symbol}" ~with_:bar.instrument_id in
+       let interval_str = Conflation.interval_to_string bar.interval in
+       String.substr_replace_all with_symbol ~pattern:"{interval}" ~with_:interval_str
      | [] -> key_pattern)
   
   | (Analytics analytics_list, Redis { key_pattern; _ }) ->
@@ -255,7 +305,7 @@ end
 
 (* Circuit breaker implementation *)
 module CircuitBreaker = struct
-  let should_allow_request breaker_state config =
+  let should_allow_request breaker_state _config =
     let now = Unix.time () in
     match breaker_state.state with
     | `Closed -> true
@@ -338,20 +388,20 @@ let publish_to_channel publisher_state data_product channel =
          | Ok redis_conn -> RedisPublisher.xadd redis_conn ~stream:subject_key ~id:"*" ~fields:[("data", formatted_data)]
          | Error err -> Lwt.return (Error err))
       
-      | File { path_pattern; format; _ } ->
+      | File { path_pattern = _; format = _; _ } ->
         (* TODO: Implement file publishing *)
         Lwt.return (Ok ())
       
-      | Webhook { url; headers; timeout_ms; _ } ->
+      | Webhook { url = _; headers = _; timeout_ms = _; _ } ->
         (* TODO: Implement webhook publishing *)
         Lwt.return (Ok ())
     in
     
     let end_time = Unix.time () in
-    let latency = end_time -. start_time in
+    let _latency = end_time -. start_time in
     
     (* Update metrics and circuit breaker *)
-    let updated_breaker_state = match result with
+    let _updated_breaker_state = match result with
       | Ok () -> CircuitBreaker.record_success breaker_state
       | Error _ -> CircuitBreaker.record_failure breaker_state publisher_state.config.circuit_breaker
     in

@@ -439,18 +439,19 @@ let calculate_symbol_analytics state bar _prev_tick =
     market_phase = None; (* TODO: implement market phase detection *)
   }
 
-(* Analytics engine state *)
-type analytics_engine = {
-  states: (string, analytics_state) Map.Poly.t;
-  config: analytics_config;
-}
-
-and analytics_config = {
+(* Analytics configuration *)
+type analytics_config = {
   instruments: string list;
   calculate_microstructure: bool;
   calculate_statistics: bool;
   lookback_periods: int list;
   update_frequency_ms: int;
+} [@@deriving show]
+
+(* Analytics engine state *)
+type analytics_engine = {
+  states: (string, analytics_state) Map.Poly.t;
+  config: analytics_config;
 }
 
 (* Create analytics engine *)

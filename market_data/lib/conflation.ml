@@ -64,19 +64,20 @@ type conflation_window = {
   sequence_counter: int64 ref;
 }
 
-(* Conflation engine state *)
-type conflation_engine = {
-  windows: (string * time_interval, conflation_window) Map.Poly.t;
-  config: conflation_config;
-}
-
-and conflation_config = {
+(* Conflation configuration *)
+type conflation_config = {
   intervals: time_interval list;
   conflation_method: conflation_method;
   instruments: string list;
   align_to_exchange: bool;      (* Align windows to exchange open times *)
   handle_gaps: bool;            (* Generate bars even during gaps *)
   max_gap_ms: int;             (* Maximum gap before starting new window *)
+} [@@deriving show]
+
+(* Conflation engine state *)
+type conflation_engine = {
+  windows: (string * time_interval, conflation_window) Map.Poly.t;
+  config: conflation_config;
 }
 
 (* Time utilities *)

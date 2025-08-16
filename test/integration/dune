@@ -1,0 +1,6 @@
+(executables
+ (public_names test_market_data_nats_flow)
+ (names test_market_data_nats_flow)
+ (libraries base lwt lwt.unix alcotest-lwt ocamlot_market_data ocamlot_nats)
+ (preprocess
+  (pps lwt_ppx)))

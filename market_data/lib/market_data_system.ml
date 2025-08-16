@@ -129,7 +129,7 @@ module Metrics = struct
     collector.metrics <- Histogram (name, values) :: collector.metrics
   
   let collect_system_metrics collector =
-    let gc_stats = Gc.stat () in
+    let gc_stats = Stdlib.Gc.stat () in
     let now = Unix.time () in
     
     record_gauge collector "memory.heap_size_mb" 
@@ -211,7 +211,7 @@ module SystemOrchestrator = struct
     }
   
   (* Main processing pipeline *)
-  let process_tick_pipeline system_state config tick =
+  let process_tick_pipeline system_state _config tick =
     let start_time = Unix.gettimeofday () in
     
     (* Step 1: Process through conflation *)
@@ -227,7 +227,7 @@ module SystemOrchestrator = struct
     let (updated_analytics_engine, analytics_results) = analytics_result in
     
     (* Step 3: Publish data *)
-    let* (publish_results, publishing_time) = Performance.measure_time_lwt (fun () ->
+    let* (_publish_results, publishing_time) = Performance.measure_time_lwt (fun () ->
       let* bar_publish_results = if not (List.is_empty new_bars) then
         publish_data_product system_state.publisher_state (ConflatedBars new_bars)
       else Lwt.return (Ok (0, 0)) in
@@ -250,7 +250,6 @@ module SystemOrchestrator = struct
       analytics_count = Int64.(+) system_state.monitoring.analytics_count (Int64.of_int (List.length analytics_results));
       last_tick_time = Some tick.timestamp;
       latency_stats = {
-        system_state.monitoring.latency_stats with
         tick_generation_ms = Performance.update_moving_average system_state.monitoring.latency_stats.tick_generation_ms 0.0 0.1;
         conflation_ms = Performance.update_moving_average system_state.monitoring.latency_stats.conflation_ms conflation_time 0.1;
         analytics_ms = Performance.update_moving_average system_state.monitoring.latency_stats.analytics_ms analytics_time 0.1;
@@ -270,7 +269,7 @@ module SystemOrchestrator = struct
   
   (* Generate and process single tick *)
   let generate_and_process_tick system_state config =
-    let (tick_batch, updated_generator_state) = generate_batch config.generator_config.profiles system_state.generator_state in
+    let (updated_generator_state, tick_batch) = generate_batch config.generator_config.profiles system_state.generator_state in
     
     let updated_system_state = { system_state with generator_state = updated_generator_state } in
     
@@ -307,7 +306,7 @@ module SystemOrchestrator = struct
   
   (* Graceful shutdown *)
   let shutdown_system system_state =
-    let* final_conflation_bars = force_complete_all system_state.conflation_engine in
+    let final_conflation_bars = force_complete_all system_state.conflation_engine in
     let (_, final_bars) = final_conflation_bars in
     
     (* Publish any remaining data *)
@@ -356,8 +355,8 @@ module HealthCheck = struct
       | _ -> `Degraded
     in
     
-    {
-      timestamp = now;
+    Publisher.{
+      health_timestamp = now;
       service_status = overall_health;
       components = [
         ("tick_generation", match tick_health with `Healthy -> `Up | _ -> `Down);
