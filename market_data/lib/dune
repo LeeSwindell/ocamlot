@@ -1,6 +1,6 @@
 (library
- (public_name ocamlot.market_data)
  (name ocamlot_market_data)
+ (public_name ocamlot.market_data)
  (libraries base core lwt lwt.unix yojson mtime ocamlot_common ocamlot_nats)
  (modules generator conflation analytics publisher market_data_system feed)
  (preprocess

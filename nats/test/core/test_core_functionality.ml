@@ -255,6 +255,119 @@ let test_connect_message_building _switch () =
     (String.is_prefix connect_msg ~prefix:"CONNECT ");
   Alcotest.(check bool) "connect message has json" true 
     (String.is_substring connect_msg ~substring:"{");
+  Alcotest.(check bool) "connect message ends with crlf" true 
+    (String.is_suffix connect_msg ~suffix:"\r\n");
+  Lwt.return_unit
+
+let test_connect_message_required_fields _switch () =
+  (* Tests that CONNECT message contains all required NATS protocol fields *)
+  let options = Nats.Protocol.default_connect_options in
+  let connect_msg = Nats.Protocol.build_connect_message options in
+  
+  (* Extract JSON part between CONNECT and \r\n *)
+  let json_start = String.length "CONNECT " in
+  let json_end = String.length connect_msg - 2 in
+  let json_str = String.sub connect_msg ~pos:json_start ~len:(json_end - json_start) in
+  
+  (* Parse JSON and check required fields *)
+  let json = Yojson.Safe.from_string json_str in
+  
+  (* Check required boolean fields are present and correct *)
+  Alcotest.(check bool) "verbose field present" true 
+    (match Yojson.Safe.Util.member "verbose" json with | `Bool false -> true | _ -> false);
+  Alcotest.(check bool) "pedantic field present" true 
+    (match Yojson.Safe.Util.member "pedantic" json with | `Bool false -> true | _ -> false);
+  Alcotest.(check bool) "tls_required field present" true 
+    (match Yojson.Safe.Util.member "tls_required" json with | `Bool false -> true | _ -> false);
+  
+  (* Check required string fields *)
+  Alcotest.(check bool) "lang field present" true 
+    (match Yojson.Safe.Util.member "lang" json with | `String "ocaml" -> true | _ -> false);
+  Alcotest.(check bool) "version field present" true 
+    (match Yojson.Safe.Util.member "version" json with | `String "1.0.0" -> true | _ -> false);
+  
+  (* Check optional fields with default values *)
+  Alcotest.(check bool) "protocol field present" true 
+    (match Yojson.Safe.Util.member "protocol" json with | `Int 1 -> true | _ -> false);
+  Alcotest.(check bool) "echo field present" true 
+    (match Yojson.Safe.Util.member "echo" json with | `Bool false -> true | _ -> false);
+  Alcotest.(check bool) "headers field present" true 
+    (match Yojson.Safe.Util.member "headers" json with | `Bool false -> true | _ -> false);
+  Alcotest.(check bool) "no_responders field present" true 
+    (match Yojson.Safe.Util.member "no_responders" json with | `Bool false -> true | _ -> false);
+  
+  Lwt.return_unit
+
+let test_connect_message_auth_fields _switch () =
+  (* Tests CONNECT message with authentication fields *)
+  let auth_options = { 
+    Nats.Protocol.default_connect_options with 
+    auth_token = Some "test-token-123";
+    user = Some "testuser";
+    pass = Some "testpass";
+  } in
+  let connect_msg = Nats.Protocol.build_connect_message auth_options in
+  
+  (* Extract and parse JSON *)
+  let json_start = String.length "CONNECT " in
+  let json_end = String.length connect_msg - 2 in
+  let json_str = String.sub connect_msg ~pos:json_start ~len:(json_end - json_start) in
+  let json = Yojson.Safe.from_string json_str in
+  
+  (* Check auth fields are present *)
+  Alcotest.(check bool) "auth_token field present" true 
+    (match Yojson.Safe.Util.member "auth_token" json with | `String "test-token-123" -> true | _ -> false);
+  Alcotest.(check bool) "user field present" true 
+    (match Yojson.Safe.Util.member "user" json with | `String "testuser" -> true | _ -> false);
+  Alcotest.(check bool) "pass field present" true 
+    (match Yojson.Safe.Util.member "pass" json with | `String "testpass" -> true | _ -> false);
+  
+  Lwt.return_unit
+
+let test_connect_message_tls_required _switch () =
+  (* Tests CONNECT message with TLS required *)
+  let tls_options = { 
+    Nats.Protocol.default_connect_options with 
+    tls_required = true;
+  } in
+  let connect_msg = Nats.Protocol.build_connect_message tls_options in
+  
+  (* Extract and parse JSON *)
+  let json_start = String.length "CONNECT " in
+  let json_end = String.length connect_msg - 2 in
+  let json_str = String.sub connect_msg ~pos:json_start ~len:(json_end - json_start) in
+  let json = Yojson.Safe.from_string json_str in
+  
+  (* Check TLS required field *)
+  Alcotest.(check bool) "tls_required field is true" true 
+    (match Yojson.Safe.Util.member "tls_required" json with | `Bool true -> true | _ -> false);
+  
+  Lwt.return_unit
+
+let test_connect_message_nkey_jwt _switch () =
+  (* Tests CONNECT message with NKey and JWT authentication *)
+  let nkey_options = { 
+    Nats.Protocol.default_connect_options with 
+    nkey = Some "UAFK5VHZRDPNMHYWN6GDQZ5AKEYIJZJHBR7AIVHQHVW6TNIIDFJNQZMS";
+    jwt = Some "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.test.jwt";
+    signature = Some "test-signature-here";
+  } in
+  let connect_msg = Nats.Protocol.build_connect_message nkey_options in
+  
+  (* Extract and parse JSON *)
+  let json_start = String.length "CONNECT " in
+  let json_end = String.length connect_msg - 2 in
+  let json_str = String.sub connect_msg ~pos:json_start ~len:(json_end - json_start) in
+  let json = Yojson.Safe.from_string json_str in
+  
+  (* Check NKey and JWT fields *)
+  Alcotest.(check bool) "nkey field present" true 
+    (match Yojson.Safe.Util.member "nkey" json with | `String _ -> true | _ -> false);
+  Alcotest.(check bool) "jwt field present" true 
+    (match Yojson.Safe.Util.member "jwt" json with | `String _ -> true | _ -> false);
+  Alcotest.(check bool) "signature field present" true 
+    (match Yojson.Safe.Util.member "signature" json with | `String _ -> true | _ -> false);
+  
   Lwt.return_unit
 
 let test_server_info_extraction _switch () =
@@ -302,6 +415,10 @@ let tests = [
   ];
   "Advanced Protocol", [
     test_case "connect message building" `Quick test_connect_message_building;
+    test_case "connect message required fields" `Quick test_connect_message_required_fields;
+    test_case "connect message auth fields" `Quick test_connect_message_auth_fields;
+    test_case "connect message tls required" `Quick test_connect_message_tls_required;
+    test_case "connect message nkey jwt" `Quick test_connect_message_nkey_jwt;
     test_case "server info extraction" `Quick test_server_info_extraction;
   ];
 ]

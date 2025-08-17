@@ -54,6 +54,66 @@ services:
     restart: unless-stopped
     networks:
       - ocamlot-network
+  # OCamlot Market Data Publisher Service
+  # Generates synthetic market data and publishes to NATS
+  market-data-publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile.market-publisher
+      cache_from:
+        - ocamlot-base:latest
+        - ocamlot-market-publisher:latest
+    image: ocamlot-market-publisher:latest
+    container_name: ocamlot-market-publisher
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NATS_HOST=nats
+      - NATS_PORT=4222
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    networks:
+      - ocamlot-network
+
+  market-data-publisher-dev:
+    image: ocamlot-base:latest
+    volumes:
+      - .:/home/opam/ocamlot
+    working_dir: /home/opam/ocamlot
+    command: dune exec --watch services/market_data_publisher/bin/main.exe
+    environment:
+      - NATS_HOST=nats
+      - NATS_PORT=4222
+    networks:
+      - ocamlot-network
+    profiles:
+      - dev
+
+  # # OCamlot Web Server
+  # # Provides WebSocket interface and NATS bridge
+  web-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.web-server
+      cache_from:
+        - ocamlot-base:latest
+        - ocamlot-web-server:latest
+    image: ocamlot-web-server:latest
+    container_name: ocamlot-web-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NATS_HOST=nats
+      - NATS_PORT=4222
+      - WEB_PORT=8080
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    networks:
+      - ocamlot-network
 
   # Optional: Redis Commander for GUI monitoring
   # Enable with: docker-compose --profile monitoring up
@@ -143,6 +203,8 @@ volumes:
   ocamlot-prometheus-data:
     driver: local
   ocamlot-grafana-data:
+    driver: local
+  ocamlot-opam-cache:
     driver: local
 
 # Custom network for service isolation and communication

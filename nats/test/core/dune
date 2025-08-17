@@ -1,5 +1,5 @@
 (test
- (name test_core_functionality)
- (libraries base lwt alcotest alcotest-lwt ocamlot_nats)
+ (name test_connect_compliance)
+ (libraries base stdio lwt alcotest alcotest-lwt ocamlot_nats yojson)
  (preprocess
   (pps lwt_ppx)))

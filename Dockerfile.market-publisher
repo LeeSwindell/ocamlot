@@ -1,0 +1,34 @@
+# OCamlot Market Data Publisher - Fast Build
+FROM ocamlot-base AS build
+
+# Copy source files (dependencies already installed in base image)
+COPY --chown=opam:opam . /home/opam/ocamlot/
+
+# Build only the market data publisher (fast build - dependencies cached)
+RUN eval $(opam env) && \
+    echo "Building market data publisher..." && \
+    dune build services/market_data_publisher/bin/main.exe && \
+    echo "Build complete!"
+
+# Runtime stage
+FROM alpine:3.19
+RUN apk add --no-cache \
+    gmp \
+    openssl \
+    && rm -rf /var/cache/apk/*
+
+# Copy the built executable
+COPY --from=build /home/opam/ocamlot/_build/default/services/market_data_publisher/bin/main.exe /usr/local/bin/market-data-publisher
+
+# Create non-root user
+RUN addgroup -g 1000 -S ocamlot && \
+    adduser -u 1000 -S ocamlot -G ocamlot
+
+USER ocamlot
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD pgrep -f market-data-publisher || exit 1
+
+EXPOSE 4222
+CMD ["/usr/local/bin/market-data-publisher"]

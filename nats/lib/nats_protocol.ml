@@ -4,19 +4,37 @@ open Base
 type connect_options = {
   verbose: bool;
   pedantic: bool;
+  tls_required: bool;
+  auth_token: string option;
+  user: string option;
+  pass: string option;
   name: string option;
   lang: string;
   version: string;
-  protocol: int;
+  protocol: int option;
+  echo: bool option;
+  signature: string option;
+  jwt: string option;
+  no_responders: bool option;
+  headers: bool option;
+  nkey: string option;
 } [@@deriving yojson]
 
 type server_info = {
   server_id: string;
+  server_name: string option;
   version: string;
   proto: int;
+  git_commit: string option;
+  go: string option;
   host: string;
   port: int;
+  headers: bool option;
   max_payload: int;
+  jetstream: bool option;
+  client_id: int option;
+  client_ip: string option;
+  xkey: string option;
 } [@@deriving yojson]
 
 type message = {
@@ -83,8 +101,18 @@ type protocol_state =
 let default_connect_options = {
   verbose = false;
   pedantic = false;
+  tls_required = false;
+  auth_token = None;
+  user = None;
+  pass = None;
   name = Some "ocamlot-nats";
   lang = "ocaml";
   version = "1.0.0";
-  protocol = 1;
+  protocol = Some 1;
+  echo = Some false;
+  signature = None;
+  jwt = None;
+  no_responders = Some false;
+  headers = Some false;
+  nkey = None;
 }

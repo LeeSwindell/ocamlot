@@ -1,0 +1,37 @@
+# OCamlot Web Server
+FROM ocamlot-base AS build
+
+# Install Node.js for JavaScript compilation (only needed for web-server)
+USER root
+RUN apk add --no-cache nodejs npm && rm -rf /var/cache/apk/*
+USER opam
+
+# Copy source files (OCaml dependencies already installed in base image)
+COPY --chown=opam:opam . /home/opam/ocamlot/
+
+# Build the web server and client (fast build - dependencies cached)
+RUN eval $(opam env) && dune build web/
+
+# Runtime stage
+FROM alpine:3.19
+RUN apk add --no-cache \
+    gmp \
+    openssl \
+    && rm -rf /var/cache/apk/*
+
+# Copy the built executable and static files
+COPY --from=build /home/opam/ocamlot/_build/default/web/server/main.exe /usr/local/bin/web-server
+COPY --from=build /home/opam/ocamlot/_build/default/web/static/ /usr/local/share/ocamlot/static/
+
+# Create non-root user
+RUN addgroup -g 1000 -S ocamlot && \
+    adduser -u 1000 -S ocamlot -G ocamlot
+
+USER ocamlot
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/ || exit 1
+
+EXPOSE 8080
+CMD ["/usr/local/bin/web-server"]

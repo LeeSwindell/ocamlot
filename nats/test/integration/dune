@@ -1,0 +1,5 @@
+(test
+ (name test_real_nats_connect)
+ (libraries base stdio lwt lwt.unix alcotest alcotest-lwt ocamlot_nats)
+ (preprocess
+  (pps lwt_ppx)))

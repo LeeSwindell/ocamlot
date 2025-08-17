@@ -1,5 +1,6 @@
 open Base
 open Lwt.Syntax
+open Stdio
 
 (* NATS Bridge Service - Connects NATS to Dream WebSocket *)
 
@@ -104,6 +105,9 @@ let handle_nats_message bridge_state subject message =
 (* Create NATS client and establish connection *)
 let create_connection config =
   try%lwt
+    printf "[NATS_BRIDGE] Attempting connection to %s:%d with timeout %.2fs\n%!" 
+      config.nats_host config.nats_port (Float.of_int config.connection_timeout_ms /. 1000.0);
+    
     let nats_config : Ocamlot_nats.Nats.connection_config = {
       host = config.nats_host;
       port = config.nats_port;
@@ -112,12 +116,20 @@ let create_connection config =
       reconnect_delay = Float.of_int config.reconnect_delay_ms /. 1000.0;
     } in
     
+    printf "[NATS_BRIDGE] NATS config created: host=%s, port=%d\n%!" 
+      nats_config.host nats_config.port;
+    
     let client = Ocamlot_nats.Nats.create ~config:nats_config () in
+    printf "[NATS_BRIDGE] NATS client created, attempting connection...\n%!";
+    
     let* () = Ocamlot_nats.Nats.connect client in
+    printf "[NATS_BRIDGE] NATS connection successful!\n%!";
     
     Lwt.return (Ok client)
   with
-  | exn -> Lwt.return (Result.Error (Exn.to_string exn))
+  | exn -> 
+    printf "[NATS_BRIDGE] NATS connection failed with exception: %s\n%!" (Exn.to_string exn);
+    Lwt.return (Result.Error (Exn.to_string exn))
 
 (* Subscribe to NATS subjects *)
 let subscribe_to_subjects bridge_state client =
@@ -263,7 +275,7 @@ let get_bridge_status bridge_state =
 
 (* Default configuration *)
 let default_config = {
-  nats_host = "localhost";
+  nats_host = "127.0.0.1";
   nats_port = 4222;
   reconnect_attempts = 5;
   reconnect_delay_ms = 2000;

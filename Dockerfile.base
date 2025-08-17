@@ -1,0 +1,44 @@
+# OCamlot Base Image - Optimized for Fast Builds
+# Shared foundation with all common dependencies pre-installed
+FROM ocaml/opam:alpine-ocaml-5.3 AS ocamlot-base
+
+# Switch to root for system packages
+USER root
+
+# Install system dependencies
+RUN apk add --no-cache \
+    pkgconf \
+    openssl-dev \
+    libffi-dev \
+    gmp-dev \
+    libev-dev \
+    git \
+    curl \
+    bash \
+    && rm -rf /var/cache/apk/*
+
+# Switch back to opam user
+USER opam
+WORKDIR /home/opam/ocamlot
+
+# Copy dependency files first for better caching
+COPY --chown=opam:opam dune-project .
+COPY --chown=opam:opam *.opam ./
+
+# Update opam and install all dependencies in one go
+RUN opam update && \
+    opam install . --deps-only --with-test && \
+    opam clean
+
+# Set environment for OCaml
+ENV OCAML_VERSION=5.3
+ENV OPAM_SWITCH_PREFIX=/home/opam/.opam/default
+ENV CAML_LD_LIBRARY_PATH=/home/opam/.opam/default/lib/stublibs
+ENV OCAML_TOPLEVEL_PATH=/home/opam/.opam/default/lib/toplevel
+ENV PATH=/home/opam/.opam/default/bin:$PATH
+
+# Verify installation
+RUN opam list | head -10
+
+# Default command
+CMD ["opam", "exec", "--", "bash"]

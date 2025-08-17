@@ -1,6 +1,7 @@
 open Base
 open Lwt.Syntax
 open Nats_protocol
+open Stdio
 
 type connection_config = {
   host: string;
@@ -61,9 +62,14 @@ let read_line conn =
 let connect conn =
   let* () = Lwt.return () in
   try
+    printf "[NATS_CONNECTION] Connecting to %s:%d...\n%!" conn.config.host conn.config.port;
+    
     (* Create TCP connection *)
     let socket = Lwt_unix.socket PF_INET SOCK_STREAM 0 in
+    printf "[NATS_CONNECTION] Socket created, resolving address: %s\n%!" conn.config.host;
+    
     let sockaddr = Unix.ADDR_INET (Unix.inet_addr_of_string conn.config.host, conn.config.port) in
+    printf "[NATS_CONNECTION] Address resolved, connecting...\n%!";
     
     let* () = Lwt_unix.connect socket sockaddr in
     
@@ -91,12 +97,19 @@ let connect conn =
     let connect_msg = build_connect_message default_connect_options in
     let* () = send_command conn connect_msg in
     
-    (* Wait for +OK or -ERR *)
+    (* Wait for +OK, -ERR, or PING (server may send PING immediately) *)
     let* response = read_line conn in
-    if String.is_prefix response ~prefix:"-ERR" then
-      raise (Protocol_error ("Server error: " ^ response))
-    else if not (String.is_prefix response ~prefix:"+OK") then
-      raise (Protocol_error ("Unexpected response: " ^ response));
+    let* () = 
+      if String.is_prefix response ~prefix:"-ERR" then
+        Lwt.fail (Protocol_error ("Server error: " ^ response))
+      else if String.equal response "PING" then
+        (* Server sent PING immediately - respond with PONG and connection is established *)
+        send_command conn pong_message
+      else if not (String.is_prefix response ~prefix:"+OK") then
+        Lwt.fail (Protocol_error ("Unexpected response: " ^ response))
+      else
+        Lwt.return_unit
+    in
     
     let connected_conn = { conn with 
       protocol_state = Connected;

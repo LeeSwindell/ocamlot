@@ -38,16 +38,23 @@ module State = struct
   (* NATS bridge management *)
   let start_nats_bridge () =
     if Option.is_none !nats_bridge then (
+      Printf.printf "[DREAM_SERVER] Starting NATS bridge with config: host=%s, port=%d\n%!" 
+        Nats_bridge.default_config.nats_host Nats_bridge.default_config.nats_port;
+      
       let message_callback msg = 
+        Printf.printf "[DREAM_SERVER] NATS bridge received message, broadcasting to %d clients\n%!" 
+          (List.length !active_connections);
         broadcast_to_all msg;
         Lwt.return_unit
       in
       let error_callback err =
+        Printf.printf "[DREAM_SERVER] NATS bridge error: %s\n%!" err;
         let error_msg : websocket_message = Error { error = "nats_bridge_error"; details = err } in
         broadcast_to_all error_msg;
         Lwt.return_unit
       in
       
+      Printf.printf "[DREAM_SERVER] Creating NATS bridge...\n%!";
       let bridge = Nats_bridge.create_bridge 
         ~config:Nats_bridge.default_config
         ~message_callback
@@ -55,9 +62,14 @@ module State = struct
       in
       
       nats_bridge := Some bridge;
-      Nats_bridge.start_bridge bridge
-    ) else 
+      Printf.printf "[DREAM_SERVER] NATS bridge created, starting bridge service...\n%!";
+      let* () = Nats_bridge.start_bridge bridge in
+      Printf.printf "[DREAM_SERVER] NATS bridge started successfully\n%!";
       Lwt.return_unit
+    ) else (
+      Printf.printf "[DREAM_SERVER] NATS bridge already running\n%!";
+      Lwt.return_unit
+    )
   
   let stop_nats_bridge () =
     match !nats_bridge with
@@ -76,20 +88,20 @@ end
 (* Market data generation using unified library *)
 module Feed = Ocamlot_market_data.Feed
 
-let market_profiles = ref Feed.default_profiles
-let market_initialized = ref false
+(* let market_profiles = ref Feed.default_profiles
+let market_initialized = ref false *)
 
-let initialize_server_market_data () =
+(* let initialize_server_market_data () =
   if not !market_initialized then (
     Feed.set_random_seed 123; (* Different seed from client for variety *)
     Feed.initialize_market_state !market_profiles;
     market_initialized := true
-  )
+  ) *)
 
-let generate_sample_market_data () =
+(* let generate_sample_market_data () =
   initialize_server_market_data ();
   let market_snapshot = Feed.generate_market_snapshot !market_profiles in
-  List.map Web_types.market_data_to_web market_snapshot
+  List.map Web_types.market_data_to_web market_snapshot *)
 
 (* WebSocket handler *)
 let websocket_handler _request =
@@ -185,7 +197,7 @@ let websocket_handler _request =
   handle_messages ())
 
 (* Market data simulation loop *)
-let start_market_data_loop () =
+(* let start_market_data_loop () =
   let rec loop () =
     if !State.simulation_running then
       let market_data_list = generate_sample_market_data () in
@@ -199,7 +211,7 @@ let start_market_data_loop () =
       let* () = Lwt_unix.sleep 1.0 in (* Check every second when stopped *)
       loop ()
   in
-  loop ()
+  loop () *)
 
 (* HTTP API endpoints *)
 let api_status _request =
@@ -258,7 +270,7 @@ let serve_static request =
 (* Main server setup *)
 let () =
   (* Start the market data simulation loop in background *)
-  Lwt.async start_market_data_loop;
+  (* Lwt.async start_market_data_loop; *)
   
   Dream.run
     ~interface:"0.0.0.0"
