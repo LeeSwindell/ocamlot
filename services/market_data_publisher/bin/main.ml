@@ -10,13 +10,16 @@ module Nats = Ocamlot_nats.Nats
 (* Market Data Publisher Service *)
 (* Generates synthetic market data and publishes to NATS *)
 
-let nats_config = {
-  Nats.Connection.host = "127.0.0.1";
-  port = 4222;
-  connect_timeout = 10.0;
-  reconnect_attempts = 3;
-  reconnect_delay = 2.0;
-}
+let nats_config = 
+  let host = Option.value (Sys.getenv "NATS_HOST") ~default:"127.0.0.1" in
+  let port = Option.value_map (Sys.getenv "NATS_PORT") ~default:4222 ~f:Int.of_string in
+  {
+    Nats.Connection.host;
+    port;
+    connect_timeout = 10.0;
+    reconnect_attempts = 3;
+    reconnect_delay = 2.0;
+  }
 
 let symbols = ["AAPL"; "GOOGL"; "MSFT"; "TSLA"; "NVDA"]
 

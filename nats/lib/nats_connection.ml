@@ -68,7 +68,16 @@ let connect conn =
     let socket = Lwt_unix.socket PF_INET SOCK_STREAM 0 in
     printf "[NATS_CONNECTION] Socket created, resolving address: %s\n%!" conn.config.host;
     
-    let sockaddr = Unix.ADDR_INET (Unix.inet_addr_of_string conn.config.host, conn.config.port) in
+    (* Resolve hostname to IP address *)
+    let addr = 
+      try 
+        Unix.inet_addr_of_string conn.config.host
+      with _ ->
+        (* If not an IP address, resolve hostname *)
+        let hostent = Unix.gethostbyname conn.config.host in
+        hostent.h_addr_list.(0)
+    in
+    let sockaddr = Unix.ADDR_INET (addr, conn.config.port) in
     printf "[NATS_CONNECTION] Address resolved, connecting...\n%!";
     
     let* () = Lwt_unix.connect socket sockaddr in

@@ -1,9 +1,8 @@
-# Docker Compose for OCamlot Trading System Local Testing
-# Provides NATS and Redis infrastructure for development and testing
+# Docker Compose for OCamlot Infrastructure
+# Provides NATS and Redis infrastructure for local development
 
 services:
   # Redis - lightweight configuration for local testing
-  # Useful for caching, session storage, and future trading features
   redis:
     image: redis:7-alpine
     container_name: ocamlot-redis-local
@@ -23,7 +22,6 @@ services:
       - ocamlot-network
 
   # NATS - core messaging infrastructure with JetStream
-  # Supports both basic pub/sub and advanced JetStream features
   nats:
     image: nats:2.10-alpine
     container_name: ocamlot-nats-local
@@ -31,7 +29,7 @@ services:
       - "4222:4222" # NATS client connections
       - "8222:8222" # HTTP monitoring
       - "6222:6222" # Cluster routing
-    command: ["--config", "/etc/nats/nats.conf"]
+    command: ["-js", "--config", "/etc/nats/nats.conf"]
     volumes:
       - ocamlot-nats-data:/data
       - ./config/nats.conf:/etc/nats/nats.conf:ro
@@ -42,75 +40,16 @@ services:
         [
           "CMD",
           "wget",
+          "--no-verbose",
           "--quiet",
           "--tries=1",
           "--spider",
-          "http://localhost:8222/healthz || curl -f http://localhost:8222/healthz",
+          "http://localhost:8222/healthz",
         ]
       interval: 5s
       timeout: 3s
       retries: 12
       start_period: 30s
-    restart: unless-stopped
-    networks:
-      - ocamlot-network
-  # OCamlot Market Data Publisher Service
-  # Generates synthetic market data and publishes to NATS
-  market-data-publisher:
-    build:
-      context: .
-      dockerfile: Dockerfile.market-publisher
-      cache_from:
-        - ocamlot-base:latest
-        - ocamlot-market-publisher:latest
-    image: ocamlot-market-publisher:latest
-    container_name: ocamlot-market-publisher
-    depends_on:
-      nats:
-        condition: service_healthy
-    environment:
-      - NATS_HOST=nats
-      - NATS_PORT=4222
-      - LOG_LEVEL=info
-    restart: unless-stopped
-    networks:
-      - ocamlot-network
-
-  market-data-publisher-dev:
-    image: ocamlot-base:latest
-    volumes:
-      - .:/home/opam/ocamlot
-    working_dir: /home/opam/ocamlot
-    command: dune exec --watch services/market_data_publisher/bin/main.exe
-    environment:
-      - NATS_HOST=nats
-      - NATS_PORT=4222
-    networks:
-      - ocamlot-network
-    profiles:
-      - dev
-
-  # # OCamlot Web Server
-  # # Provides WebSocket interface and NATS bridge
-  web-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.web-server
-      cache_from:
-        - ocamlot-base:latest
-        - ocamlot-web-server:latest
-    image: ocamlot-web-server:latest
-    container_name: ocamlot-web-server
-    ports:
-      - "8080:8080"
-    depends_on:
-      nats:
-        condition: service_healthy
-    environment:
-      - NATS_HOST=nats
-      - NATS_PORT=4222
-      - WEB_PORT=8080
-      - LOG_LEVEL=info
     restart: unless-stopped
     networks:
       - ocamlot-network
@@ -203,8 +142,6 @@ volumes:
   ocamlot-prometheus-data:
     driver: local
   ocamlot-grafana-data:
-    driver: local
-  ocamlot-opam-cache:
     driver: local
 
 # Custom network for service isolation and communication

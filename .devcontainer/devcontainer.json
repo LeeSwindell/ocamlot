@@ -1,0 +1,89 @@
+{
+  "name": "OCamlot Trading System",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "ocamlot-base",
+  "workspaceFolder": "/home/opam/ocamlot",
+  "shutdownAction": "stopCompose",
+  
+  // Services to start with the devcontainer
+  "runServices": [
+    "redis",
+    "nats", 
+    "market-data-publisher-dev",
+    "web-server-dev"
+  ],
+  
+  // VS Code customizations
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ocamllabs.ocaml-platform",
+        "ms-vscode.vscode-json",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.docker",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "github.copilot"
+      ],
+      "settings": {
+        "ocaml.dune.profile": "dev",
+        "ocaml.dune.autoDetect": true,
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.watcherExclude": {
+          "**/_build/**": true,
+          "**/node_modules/**": true
+        }
+      }
+    }
+  },
+  
+  // Port forwarding for development
+  "forwardPorts": [
+    4222,  // NATS
+    8222,  // NATS monitoring  
+    6379,  // Redis
+    8080   // Web server
+  ],
+  "portsAttributes": {
+    "4222": {
+      "label": "NATS Server",
+      "protocol": "tcp"
+    },
+    "8222": {
+      "label": "NATS Monitor", 
+      "protocol": "http",
+      "onAutoForward": "openBrowser"
+    },
+    "6379": {
+      "label": "Redis",
+      "protocol": "tcp"
+    },
+    "8080": {
+      "label": "Web Dashboard",
+      "protocol": "http", 
+      "onAutoForward": "openBrowser"
+    }
+  },
+  
+  // Post-creation commands
+  "postCreateCommand": "echo 'OCamlot devcontainer ready! Services starting with hot reload.'",
+  
+  // Container user
+  "remoteUser": "opam",
+  
+  // Environment variables
+  "remoteEnv": {
+    "NATS_HOST": "nats",
+    "NATS_PORT": "4222",
+    "LOG_LEVEL": "info"
+  },
+  
+  // Features to install
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true
+    }
+  }
+}

@@ -40,21 +40,22 @@ The compiler ensures all cases are handled, making it impossible to forget to im
 
 ### Prerequisites
 - OCaml 4.14+ and opam
-- Docker and docker-compose (for testing infrastructure)
+- Docker and docker-compose (for infrastructure)
+- [Overmind](https://github.com/DarthSim/overmind) for process management
 
 ### Development Setup
 ```bash
 # Install dependencies
 opam install --deps-only .
 
-# Start development infrastructure (NATS + Redis)
-make docker-up
+# Start infrastructure (NATS + Redis)
+make infra-up
 
-# Build and test
-make dev
+# Start all services with hot reload
+make overmind-start
 
-# Run comprehensive tests
-make docker-test
+# Connect to running services to see logs
+overmind connect
 ```
 
 ## Building and Testing
@@ -67,49 +68,79 @@ make build
 # Run tests (without external services)
 make test
 
-# Run specific test suites
-make test-core      # Core NATS functionality
-make test-nats      # Basic NATS tests
-make test-messaging # Messaging layer tests
-```
+# Development workflow with hot reload
+make overmind-start     # Start all services
+overmind connect        # View logs and interact
+overmind stop          # Stop all services
 
-### Docker-based Testing
-```bash
-# Full test cycle with NATS and Redis
-make docker-test
-
-# Start services for manual testing
-make docker-up
-
-# Stop services
-make docker-down
-
-# Start with monitoring UI
-make docker-monitor
+# Infrastructure management
+make infra-up          # Start NATS + Redis
+make infra-down        # Stop infrastructure
+make infra-monitor     # Start with monitoring UI
+make infra-metrics     # Start with metrics (Grafana/Prometheus)
 ```
 
 ## Infrastructure Services
 
-When running `make docker-up`, the following services are available:
+When running `make infra-up`, the following services are available:
 
 - **NATS Server**: `nats://localhost:4222`
 - **NATS Monitoring**: `http://localhost:8222`
 - **Redis**: `redis://localhost:6379`
-- **Redis UI**: `http://localhost:8081` (with monitoring profile)
 
 ### Monitoring and Metrics
 ```bash
 # Start with monitoring dashboards
-make docker-monitor
+make infra-monitor
 
 # Start with full metrics stack (Grafana + Prometheus)
-make docker-metrics
+make infra-metrics
 ```
 
 Access monitoring dashboards:
-- **Redis Commander**: http://localhost:8081 (admin/admin)
-- **Grafana**: http://localhost:3000 (admin/admin)
-- **Prometheus**: http://localhost:9090
+- **NATS UI**: http://localhost:7777 (with monitoring profile)
+- **Redis Commander**: http://localhost:8081 (admin/admin, with monitoring profile)
+- **Grafana**: http://localhost:3000 (admin/admin, with metrics profile)
+- **Prometheus**: http://localhost:9090 (with metrics profile)
+
+## Development Workflow
+
+### Overmind Process Management
+
+OCamlot uses [Overmind](https://github.com/DarthSim/overmind) for managing development processes with hot reload:
+
+```bash
+# Start infrastructure and all services
+make overmind-start
+
+# In another terminal, connect to see logs
+overmind connect
+
+# Development workflow:
+# 1. Edit code files
+# 2. watcher rebuilds automatically 
+# 3. Restart services: overmind restart web
+# 4. View changes at http://localhost:8080
+
+# Stop everything
+make overmind-stop
+```
+
+Services managed by Overmind:
+- **watcher**: Single dune process that rebuilds on file changes
+- **web**: Web server with WebSocket interface (`http://localhost:8080`)
+- **market-data**: Market data publisher (publishes to NATS)
+
+> **Note**: This setup avoids dune build lock conflicts by using a single `dune build --watch` process. After code changes, manually restart individual services with `overmind restart <service>`.
+
+### Environment Configuration
+
+Environment variables are configured in `.overmind.env`:
+- `NATS_HOST=localhost` - NATS server hostname (resolves to Docker container)
+- `NATS_PORT=4222` - NATS client port
+- `WEB_PORT=8080` - Web server port
+
+The OCaml services connect to Docker infrastructure running on localhost ports.
 
 ## Example Configuration
 

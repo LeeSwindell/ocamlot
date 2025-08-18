@@ -275,8 +275,8 @@ let get_bridge_status bridge_state =
 
 (* Default configuration *)
 let default_config = {
-  nats_host = "127.0.0.1";
-  nats_port = 4222;
+  nats_host = Option.value (Sys.getenv "NATS_HOST") ~default:"127.0.0.1";
+  nats_port = Option.value_map (Sys.getenv "NATS_PORT") ~default:4222 ~f:Int.of_string;
   reconnect_attempts = 5;
   reconnect_delay_ms = 2000;
   subjects = [
