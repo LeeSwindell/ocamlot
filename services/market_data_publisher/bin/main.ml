@@ -24,15 +24,13 @@ let nats_config =
 let symbols = ["AAPL"; "GOOGL"; "MSFT"; "TSLA"; "NVDA"]
 
 let create_market_data_system () =
-  printf "[PUBLISHER] Initializing market data system...\n%!";
+  printf "[PUBLISHER] Initializing market data system with %d symbols...\n%!" 
+    (List.length symbols);
   
   (* Initialize market data generation *)
   let profiles = Feed.default_profiles in
   Feed.set_random_seed 42;
   Feed.initialize_market_state profiles;
-  
-  printf "[PUBLISHER] Market data system initialized with %d symbols\n%!" 
-    (List.length symbols);
   
   profiles
 
@@ -45,7 +43,7 @@ let connect_to_nats () =
       let client = Nats.create ~config:nats_config () in
       let* () = Nats.connect client in
       
-      printf "[PUBLISHER] Successfully connected to NATS server\n%!";
+      printf "[PUBLISHER] Connected to NATS - ready to publish\n%!";
       Lwt.return (Ok client)
     with
     | exn ->
@@ -95,10 +93,6 @@ let generate_and_publish_data client profiles =
           let payload = Yojson.Safe.to_string json in
           
           let* () = Nats.publish_string client ~subject payload in
-          
-          printf "[PUBLISHER] Published bar for %s: OHLCV=%.2f/%.2f/%.2f/%.2f/%.0f\n%!" 
-            bar.instrument_id bar.open_price bar.high_price bar.low_price bar.close_price bar.volume;
-          
           Lwt.return_unit
         with
         | exn ->
@@ -151,12 +145,6 @@ let generate_and_publish_data client profiles =
           let payload = Yojson.Safe.to_string json in
           
           let* () = Nats.publish_string client ~subject payload in
-          
-          printf "[PUBLISHER] Published analytics for %s: RSI=%.1f, VWAP=%.2f\n%!" 
-            analytics.instrument_id 
-            (Option.value_map analytics.rsi_14 ~default:0.0 ~f:(fun r -> r.value))
-            (Option.value analytics.vwap_daily ~default:0.0);
-          
           Lwt.return_unit
         with
         | exn ->
@@ -165,7 +153,10 @@ let generate_and_publish_data client profiles =
           Lwt.return_unit
       ) bars in
       
-      printf "[PUBLISHER] Completed iteration %d, sleeping for 1 second...\n%!" iteration;
+      (* Log status every 60 iterations (1 minute) *)
+      if iteration % 60 = 0 then
+        printf "[PUBLISHER] Published %d iterations (bars + analytics)\n%!" iteration;
+      
       let* () = Lwt_unix.sleep 1.0 in
       publish_loop (iteration + 1)
       
@@ -192,7 +183,5 @@ let () =
   Lwt_main.run (
     let profiles = create_market_data_system () in
     let* client = connect_to_nats () in
-    
-    printf "[PUBLISHER] Starting continuous market data publishing (Ctrl+C to stop)...\n%!";
     generate_and_publish_data client profiles
   )

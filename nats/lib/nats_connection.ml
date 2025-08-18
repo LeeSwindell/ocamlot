@@ -1,7 +1,6 @@
 open Base
 open Lwt.Syntax
 open Nats_protocol
-open Stdio
 
 type connection_config = {
   host: string;
@@ -62,11 +61,8 @@ let read_line conn =
 let connect conn =
   let* () = Lwt.return () in
   try
-    printf "[NATS_CONNECTION] Connecting to %s:%d...\n%!" conn.config.host conn.config.port;
-    
     (* Create TCP connection *)
     let socket = Lwt_unix.socket PF_INET SOCK_STREAM 0 in
-    printf "[NATS_CONNECTION] Socket created, resolving address: %s\n%!" conn.config.host;
     
     (* Resolve hostname to IP address *)
     let addr = 
@@ -78,7 +74,6 @@ let connect conn =
         hostent.h_addr_list.(0)
     in
     let sockaddr = Unix.ADDR_INET (addr, conn.config.port) in
-    printf "[NATS_CONNECTION] Address resolved, connecting...\n%!";
     
     let* () = Lwt_unix.connect socket sockaddr in
     
