@@ -1,0 +1,16 @@
+(executable
+ (public_name ocamlot-oms)
+ (name main)
+ (libraries 
+  base 
+  lwt 
+  lwt.unix
+  logs 
+  logs.fmt 
+  fmt
+  yojson
+  js_of_ocaml
+  oms_service
+  ocamlot_infrastructure_nats)
+ (preprocess
+  (pps lwt_ppx)))

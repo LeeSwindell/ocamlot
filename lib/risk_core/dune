@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.risk_core)
+ (name ocamlot_risk_core)
+ (libraries base ocamlot_core_types ocamlot_core_domain)
+ (preprocess
+  (pps ppx_deriving.show)))

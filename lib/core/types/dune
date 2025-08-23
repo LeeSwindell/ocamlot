@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.core.types)
+ (name ocamlot_core_types)
+ (libraries base yojson)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving_yojson)))

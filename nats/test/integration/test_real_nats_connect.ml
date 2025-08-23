@@ -29,15 +29,15 @@ let test_real_connect_handshake _switch () =
     
     let* result = 
       try%lwt
-        let conn = Nats.Connection.create_connection ~config () in
-        let* connected_conn = Nats.Connection.connect conn in
+        let client = Nats.create ~config () in
+        let* () = Nats.connect client in
         
         (* Verify connection state *)
         Alcotest.(check bool) "connection established" true 
-          (Nats.Connection.is_connected connected_conn);
+          (Nats.is_connected client);
         
         (* Get server info from handshake *)
-        let server_info = connected_conn.server_info in
+        let server_info = Nats.get_server_info client in
         Alcotest.(check bool) "server info received" true 
           (Option.is_some server_info);
         
@@ -48,7 +48,7 @@ let test_real_connect_handshake _switch () =
           (info.proto >= 1);
         
         (* Clean disconnect *)
-        let* _disconnected_conn = Nats.Connection.disconnect connected_conn in
+        let* () = Nats.disconnect client in
         Lwt.return (Ok ())
       with
       | Unix.Unix_error (Unix.ECONNREFUSED, _, _) -> 
@@ -82,8 +82,8 @@ let test_real_connect_options_validation _switch () =
     
     let* result = 
       try%lwt
-        let conn = Nats.Connection.create_connection ~config () in
-        let* connected_conn = Nats.Connection.connect conn in
+        let client = Nats.create ~config () in
+        let* () = Nats.connect client in
         
         (* Test with verbose enabled - future enhancement would allow testing different options *)
         let _verbose_options = { 
@@ -94,10 +94,10 @@ let test_real_connect_options_validation _switch () =
         
         (* For now, just verify the first connection worked *)
         Alcotest.(check bool) "verbose connection works" true 
-          (Nats.Connection.is_connected connected_conn);
+          (Nats.is_connected client);
         
         (* Clean disconnect *)
-        let* _disconnected = Nats.Connection.disconnect connected_conn in
+        let* () = Nats.disconnect client in
         Lwt.return (Ok ())
       with
       | Unix.Unix_error (Unix.ECONNREFUSED, _, _) -> 
@@ -128,11 +128,13 @@ let test_real_connect_error_scenarios _switch () =
           host = nats_host; 
           port = 9999; (* wrong port *)
         } in
-        let conn = Nats.Connection.create_connection ~config:bad_config () in
-        let* _connected = Nats.Connection.connect conn in
+        let client = Nats.create ~config:bad_config () in
+        let* () = Nats.connect client in
         Lwt.return (Error "Should have failed")
       with
       | Unix.Unix_error (Unix.ECONNREFUSED, _, _) -> 
+        Lwt.return (Ok "Connection refused as expected")
+      | Nats.Protocol_error msg when String.is_substring msg ~substring:"Connection refused" ->
         Lwt.return (Ok "Connection refused as expected")
       | exn -> 
         Lwt.return (Error ("Unexpected error: " ^ (Exn.to_string exn)))
@@ -149,11 +151,14 @@ let test_real_connect_error_scenarios _switch () =
           host = "nonexistent.host"; 
           port = nats_port;
         } in
-        let conn = Nats.Connection.create_connection ~config:bad_config () in
-        let* _connected = Nats.Connection.connect conn in
+        let client = Nats.create ~config:bad_config () in
+        let* () = Nats.connect client in
         Lwt.return (Error "Should have failed")
       with
       | Unix.Unix_error _ -> 
+        Lwt.return (Ok "Host resolution failed as expected")
+      | Stdlib.Not_found ->
+        (* Unix.gethostbyname raises Not_found for non-existent hosts *)
         Lwt.return (Ok "Host resolution failed as expected")
       | exn -> 
         Lwt.return (Error ("Unexpected error: " ^ (Exn.to_string exn)))
@@ -175,11 +180,11 @@ let test_real_connect_server_info_parsing _switch () =
           host = nats_host; 
           port = nats_port; 
         } in
-        let conn = Nats.Connection.create_connection ~config () in
-        let* connected_conn = Nats.Connection.connect conn in
+        let client = Nats.create ~config () in
+        let* () = Nats.connect client in
         
         (* Verify server info was parsed correctly *)
-        let server_info = connected_conn.server_info in
+        let server_info = Nats.get_server_info client in
         Alcotest.(check bool) "server info exists" true (Option.is_some server_info);
         
         let info = Option.value_exn server_info in
@@ -200,7 +205,7 @@ let test_real_connect_server_info_parsing _switch () =
         printf "Connected to NATS server: %s (version %s, proto %d)\n" 
           info.server_id info.version info.proto;
         
-        let* _disconnected = Nats.Connection.disconnect connected_conn in
+        let* () = Nats.disconnect client in
         Lwt.return (Ok ())
       with
       | Unix.Unix_error (Unix.ECONNREFUSED, _, _) -> 

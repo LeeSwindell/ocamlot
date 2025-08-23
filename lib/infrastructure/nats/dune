@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.infrastructure.nats)
+ (name ocamlot_infrastructure_nats)
+ (libraries base stdio lwt lwt.unix yojson)
+ (preprocess
+  (pps lwt_ppx ppx_deriving_yojson)))

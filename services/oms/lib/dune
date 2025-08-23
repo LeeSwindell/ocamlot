@@ -1,0 +1,14 @@
+(library
+ (name oms_service)
+ (libraries 
+  base 
+  lwt 
+  yojson
+  ppx_deriving_yojson.runtime
+  ocamlot_core_types 
+  ocamlot_core_domain 
+  ocamlot_core_events
+  ocamlot_oms_core
+  ocamlot_infrastructure_nats)
+ (preprocess
+  (pps lwt_ppx ppx_deriving_yojson)))

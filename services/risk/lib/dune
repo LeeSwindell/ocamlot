@@ -1,0 +1,12 @@
+(library
+ (name risk_service)
+ (libraries 
+  base 
+  lwt 
+  yojson
+  ocamlot_core_types 
+  ocamlot_core_domain 
+  ocamlot_risk_core
+  ocamlot_infrastructure_nats)
+ (preprocess
+  (pps lwt_ppx)))

@@ -1,0 +1,6 @@
+(library
+ (public_name ocamlot.oms_core)
+ (name ocamlot_oms_core)
+ (libraries base ocamlot_core_types ocamlot_core_domain ocamlot_core_events)
+ (preprocess
+  (pps ppx_deriving.show)))

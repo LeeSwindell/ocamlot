@@ -1,0 +1,15 @@
+(executable
+ (public_name ocamlot-risk)
+ (name main)
+ (libraries 
+  base 
+  lwt 
+  lwt.unix
+  logs 
+  logs.fmt 
+  fmt
+  js_of_ocaml
+  risk_service
+  ocamlot_infrastructure_nats)
+ (preprocess
+  (pps lwt_ppx)))
