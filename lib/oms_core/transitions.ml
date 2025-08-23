@@ -93,7 +93,7 @@ let transition_to_rejected order ~reason ~timestamp =
 
 let apply_amendment order ~new_quantity ~new_price ~timestamp =
   match order.Order.status with
-  | New | PartiallyFilled { filled_qty; _ } ->
+  | New | PartiallyFilled _ ->
     let min_qty = match order.status with
       | PartiallyFilled { filled_qty; _ } -> filled_qty
       | _ -> 0.0

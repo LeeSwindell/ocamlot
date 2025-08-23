@@ -1,9 +1,0 @@
-(test
- (name test_risk)
- (libraries base core lwt alcotest alcotest-lwt ocamlot_common ocamlot_core ocamlot_oms ocamlot_risk)
- (preprocess
-  (pps lwt_ppx))
- (action
-  (setenv ALCOTEST_VERBOSE true
-   (setenv ALCOTEST_SHOW_ERRORS true
-    (run %{test} --verbose)))))

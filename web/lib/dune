@@ -1,6 +1,6 @@
 (library
  (public_name ocamlot.web)
  (name ocamlot_web)
- (libraries base yojson lwt ocamlot_market_data ocamlot_nats)
+ (libraries base yojson lwt ocamlot_market_data_core ocamlot_infrastructure_nats)
  (preprocess
   (pps ppx_deriving.show ppx_deriving_yojson lwt_ppx)))

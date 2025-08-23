@@ -1,6 +1,6 @@
 (executable
  (public_name market_data_publisher)
  (name main)
- (libraries base stdio lwt lwt.unix ocamlot_nats ocamlot_market_data yojson)
+ (libraries base stdio lwt lwt.unix ocamlot_infrastructure_nats ocamlot_market_data_core yojson)
  (preprocess
   (pps lwt_ppx)))

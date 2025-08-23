@@ -1,6 +1,0 @@
-(executable
- (public_name test-nats-bridge)
- (name test_nats_bridge)
- (libraries base lwt lwt.unix ocamlot_web ocamlot_nats ocamlot_market_data)
- (modules test_nats_bridge)
- (preprocess (pps lwt_ppx)))

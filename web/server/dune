@@ -1,6 +1,6 @@
 (executable
  (public_name ocamlot-web-server)
  (name main)
- (libraries lwt lwt.unix dream ocamlot_web ocamlot_nats ocamlot_market_data)
+ (libraries lwt lwt.unix dream ocamlot_web ocamlot_infrastructure_nats ocamlot_market_data_core)
  (preprocess
   (pps lwt_ppx)))

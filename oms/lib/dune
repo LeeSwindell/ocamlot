@@ -1,6 +1,0 @@
-(library
- (public_name ocamlot.oms)
- (name ocamlot_oms)
- (libraries base core lwt ocamlot_common ocamlot_core)
- (preprocess
-  (pps lwt_ppx ppx_deriving.show)))

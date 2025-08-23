@@ -1,6 +1,6 @@
 (executable
  (public_name ocamlot-ingress)
  (name main)
- (libraries base core lwt lwt.unix yojson logs logs.fmt fmt ocamlot_common ocamlot_core ocamlot_oms)
+ (libraries base core lwt lwt.unix yojson logs logs.fmt fmt ocamlot_core_types ocamlot_core_domain ocamlot_oms_core)
  (preprocess
   (pps lwt_ppx)))

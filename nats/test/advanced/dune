@@ -1,6 +1,0 @@
-(executable
- (public_name test_connection_advanced)
- (name test_connection_advanced)
- (libraries base lwt alcotest alcotest-lwt ocamlot_nats)
- (preprocess
-  (pps lwt_ppx)))

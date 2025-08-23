@@ -1,6 +1,6 @@
 (executable
  (public_name ocamlot-egress)
  (name main)
- (libraries base core lwt lwt.unix logs logs.fmt fmt ocamlot_common ocamlot_fix ocamlot_market_data)
+ (libraries base core lwt lwt.unix logs logs.fmt fmt ocamlot_core_types ocamlot_infrastructure_fix ocamlot_market_data_core)
  (preprocess
   (pps lwt_ppx)))

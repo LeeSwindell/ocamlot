@@ -1,7 +1,0 @@
-(library
- (name ocamlot_market_data)
- (public_name ocamlot.market_data)
- (libraries base core lwt lwt.unix yojson mtime ocamlot_common ocamlot_nats)
- (modules generator conflation analytics publisher market_data_system feed)
- (preprocess
-  (pps lwt_ppx ppx_deriving.show ppx_deriving_yojson)))
