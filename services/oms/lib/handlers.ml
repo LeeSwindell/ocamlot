@@ -1,7 +1,6 @@
 open Base
 open Lwt.Syntax
-open Ocamlot_core_types
-open Ocamlot_core_domain
+module Order = Ocamlot_core_domain.Order
 open Ocamlot_core_events
 open Ocamlot_oms_core
 open Ocamlot_infrastructure_nats
@@ -17,12 +16,22 @@ type order_response = {
   reason: string option;
 } [@@deriving yojson]
 
+type fill_notification = {
+  order_id: string;
+  fill_qty: float;
+  fill_price: float;
+} [@@deriving yojson]
+
+type cancel_request = {
+  order_id: string;
+} [@@deriving yojson]
+
 let handle_new_order state nats_client request =
   let* rules = State.get_rules_for_account state request.account_id in
   match Validation.validation_pipeline rules request.order with
   | Ok validated_order ->
     let* () = State.store_order state validated_order in
-    let event = Events.OrderSubmitted validated_order in
+    let _event = Events.OrderSubmitted validated_order in
     let* () = 
       (* Publish to NATS *)
       let event_json = Yojson.Safe.to_string (`Assoc [
@@ -30,11 +39,11 @@ let handle_new_order state nats_client request =
         ("order_id", `String validated_order.id);
         ("instrument", `String validated_order.instrument_id);
         ("quantity", `Float validated_order.quantity);
-        ("timestamp", `Float (Unix.time ()))
+        ("timestamp", `Float (Unix.gettimeofday ()))
       ]) in
-      Nats_client.publish nats_client 
+      Nats_client.publish_string nats_client 
         ~subject:"orders.accepted"
-        ~payload:event_json
+        event_json
     in
     (* Send to risk check *)
     let* () = 
@@ -45,9 +54,9 @@ let handle_new_order state nats_client request =
         ("quantity", `Float validated_order.quantity);
         ("side", `String (match validated_order.side with Buy -> "buy" | Sell -> "sell"));
       ]) in
-      Nats_client.publish nats_client
+      Nats_client.publish_string nats_client
         ~subject:"risk.check_request"
-        ~payload:risk_request
+        risk_request
     in
     Lwt.return (Ok { order_id = validated_order.id; status = `Accepted; reason = None })
   | Error err ->
@@ -66,22 +75,30 @@ let handle_new_order state nats_client request =
         ("type", `String "order_rejected");
         ("order_id", `String request.order.id);
         ("reason", `String reason);
-        ("timestamp", `Float (Unix.time ()))
+        ("timestamp", `Float (Unix.gettimeofday ()))
       ]) in
-      Nats_client.publish nats_client
+      Nats_client.publish_string nats_client
         ~subject:"orders.rejected"
-        ~payload:event_json
+        event_json
     in
     Lwt.return (Ok { order_id = request.order.id; status = `Rejected; reason = Some reason })
 
-let handle_fill_notification state nats_client notification =
-  let order_id = notification##order_id in
-  let fill_qty = notification##fill_qty in
-  let fill_price = notification##fill_price in
+let handle_fill_notification state nats_client notification_json =
+  let parse_fill_notification json =
+    let open Yojson.Safe.Util in
+    ({ order_id = json |> member "order_id" |> to_string;
+       fill_qty = json |> member "fill_qty" |> to_float;
+       fill_price = json |> member "fill_price" |> to_float;
+     } : fill_notification)
+  in
+  let notification = parse_fill_notification notification_json in
+  let order_id = notification.order_id in
+  let fill_qty = notification.fill_qty in
+  let fill_price = notification.fill_price in
   
   match State.get_order state order_id with
   | Some order ->
-    (match Transitions.transition_to_filled order ~fill_qty ~fill_price ~timestamp:(Unix.time ()) with
+    (match Transitions.transition_to_filled order ~fill_qty ~fill_price ~timestamp:(Unix.gettimeofday ()) with
     | Ok (updated_order, side_effects) ->
       let* () = State.update_order state updated_order in
       let* () = 
@@ -98,15 +115,15 @@ let handle_fill_notification state nats_client notification =
                 ])
               | _ -> "{}"
             in
-            Nats_client.publish nats_client ~subject:"orders.filled" ~payload:event_json
+            Nats_client.publish_string nats_client ~subject:"orders.filled" event_json
           | Transitions.UpdatePosition pos ->
             let position_json = Yojson.Safe.to_string (`Assoc [
               ("instrument_id", `String pos.instrument_id);
               ("quantity", `Float pos.quantity);
               ("side", `String (match pos.side with Buy -> "buy" | Sell -> "sell"));
             ]) in
-            Nats_client.publish nats_client ~subject:"positions.update" ~payload:position_json
-          | Transitions.UpdateBalance amount ->
+            Nats_client.publish_string nats_client ~subject:"positions.update" position_json
+          | Transitions.UpdateBalance _amount ->
             Lwt.return_unit
         ) side_effects
       in
@@ -116,11 +133,15 @@ let handle_fill_notification state nats_client notification =
   | None ->
     Lwt.return (Error "Order not found")
 
-let handle_cancel_request state nats_client request =
-  let order_id = request##order_id in
+let handle_cancel_request state nats_client request_json =
+  let request = match cancel_request_of_yojson (Yojson.Safe.from_string request_json) with
+    | Ok req -> req
+    | Error _ -> failwith "Invalid cancel request"
+  in
+  let order_id = request.order_id in
   match State.get_order state order_id with
   | Some order ->
-    (match Transitions.transition_to_cancelled order ~timestamp:(Unix.time ()) with
+    (match Transitions.transition_to_cancelled order ~timestamp:(Unix.gettimeofday ()) with
     | Ok (updated_order, side_effects) ->
       let* () = State.update_order state updated_order in
       let* () =
@@ -131,7 +152,7 @@ let handle_cancel_request state nats_client request =
               ("order_id", `String cancel.order_id);
               ("timestamp", `Float cancel.timestamp);
             ]) in
-            Nats_client.publish nats_client ~subject:"orders.cancelled" ~payload:event_json
+            Nats_client.publish_string nats_client ~subject:"orders.cancelled" event_json
           | _ -> Lwt.return_unit
         ) side_effects
       in

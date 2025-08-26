@@ -1,5 +1,5 @@
 open Base
-open Lwt.Syntax
+(* open Lwt.Syntax *)
 open Ocamlot_core_types
 open Ocamlot_risk_core
 
@@ -85,6 +85,9 @@ let update_position state account_id ~instrument_id ~quantity ~side ~price =
       }
   in
   Hashtbl.set portfolio.positions ~key:instrument_id ~data:new_pos
+
+let update_limits state account_id limits =
+  Hashtbl.set state.limits ~key:account_id ~data:limits
 
 let record_check_result state ~passed =
   state.checks_performed <- state.checks_performed + 1;

@@ -211,7 +211,7 @@ let set_random_seed seed =
   Random.init seed
 
 (* Conversion functions for server compatibility *)
-let market_data_to_web (data : Ocamlot_market_data.Feed.market_data) : web_market_data =
+let market_data_to_web (data : Ocamlot_market_data_core.Feed.market_data) : web_market_data =
   {
     instrument_id = data.instrument_id;
     bid = data.bid;
@@ -220,8 +220,8 @@ let market_data_to_web (data : Ocamlot_market_data.Feed.market_data) : web_marke
     volume = data.volume;
     timestamp = data.timestamp;
   }
-
-let web_to_market_data (data : web_market_data) : Ocamlot_market_data.Feed.market_data =
+(* 
+let web_to_market_data (data : web_market_data) : Ocamlot_market_data_core.Feed.market_data =
   {
     instrument_id = data.instrument_id;
     bid = data.bid;
@@ -374,4 +374,4 @@ let default_simulation_config = {
     ("TSLA", 800.0);
     ("AMZN", 3200.0);
   ];
-}
+} *)

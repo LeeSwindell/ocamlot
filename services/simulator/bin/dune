@@ -5,12 +5,14 @@
   base 
   lwt 
   lwt.unix
+  unix
   logs 
   logs.fmt 
   fmt
   yojson
   js_of_ocaml
   simulator_service
+  ocamlot_market_data_core
   ocamlot_infrastructure_nats)
  (preprocess
   (pps lwt_ppx)))

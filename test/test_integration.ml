@@ -1,4 +1,3 @@
-open Lwt.Syntax
 open Alcotest_lwt
 open Ocamlot_core_types
 open Ocamlot_core_domain
@@ -42,7 +41,7 @@ let test_order_validation _switch () =
 
 let test_risk_limits _switch () =
   let limits = Checks.default_limits in
-  Alcotest.(check bool) "max order size positive" true Float.(limits.max_order_size > 0.0);
+  Alcotest.(check bool) "max order size positive" true (limits.max_order_size > 0.0);
   Lwt.return ()
 
 let test_order_transitions _switch () =

@@ -1,4 +1,4 @@
-open Base
+(* open Base
 open Lwt.Syntax
 open Stdio
 
@@ -16,11 +16,11 @@ type nats_bridge_config = {
 
 (* Connection state tracking *)
 type connection_state = {
-  mutable client: Ocamlot_nats.Nats.client option;
+  mutable client: Ocamlot_infrastructure_nats.Nats_client.client option;
   is_connected: bool ref;
   last_connection_attempt: float ref;
   connection_attempts: int ref;
-  subscriptions: (string * Ocamlot_nats.Nats.subscription) list ref;
+  subscriptions: (string * Ocamlot_infrastructure_nats.Nats_client.subscription) list ref;
 }
 
 (* Bridge service state *)
@@ -93,7 +93,7 @@ let parse_nats_message subject payload =
 
 (* NATS message handler *)
 let handle_nats_message bridge_state subject message =
-  let payload = Bytes.to_string message.Ocamlot_nats.Nats.Protocol.payload in
+  let payload = Bytes.to_string message.Ocamlot_infrastructure_nats.Nats_protocol.payload in
   
   match parse_nats_message subject payload with
   | Ok websocket_msg ->
@@ -108,7 +108,7 @@ let create_connection config =
     printf "[NATS_BRIDGE] Attempting connection to %s:%d with timeout %.2fs\n%!" 
       config.nats_host config.nats_port (Float.of_int config.connection_timeout_ms /. 1000.0);
     
-    let nats_config : Ocamlot_nats.Nats.connection_config = {
+    let nats_config : Ocamlot_infrastructure_nats.Nats_connection.connection_config = {
       host = config.nats_host;
       port = config.nats_port;
       connect_timeout = Float.of_int config.connection_timeout_ms /. 1000.0;
@@ -119,10 +119,10 @@ let create_connection config =
     printf "[NATS_BRIDGE] NATS config created: host=%s, port=%d\n%!" 
       nats_config.host nats_config.port;
     
-    let client = Ocamlot_nats.Nats.create ~config:nats_config () in
+    let client = Ocamlot_infrastructure_nats.Nats_client.create ~config:nats_config () in
     printf "[NATS_BRIDGE] NATS client created, attempting connection...\n%!";
     
-    let* () = Ocamlot_nats.Nats.connect client in
+    let* () = Ocamlot_infrastructure_nats.Nats_client.connect client in
     printf "[NATS_BRIDGE] NATS connection successful!\n%!";
     
     Lwt.return (Ok client)
@@ -136,7 +136,7 @@ let subscribe_to_subjects bridge_state client =
   Lwt_list.fold_left_s (fun acc subject ->
     try%lwt
       let callback msg = handle_nats_message bridge_state subject msg in
-      let* subscription = Ocamlot_nats.Nats.subscribe client ~subject ~callback in
+      let* subscription = Ocamlot_infrastructure_nats.Nats_client.subscribe client ~subject ~callback in
       
       (* Store subscription for cleanup *)
       bridge_state.connection.subscriptions := (subject, subscription) :: !(bridge_state.connection.subscriptions);
@@ -204,14 +204,14 @@ let cleanup_connection bridge_state =
     (* Unsubscribe from all subjects *)
     let* () = Lwt_list.iter_s (fun (_subject, subscription) ->
       try%lwt
-        Ocamlot_nats.Nats.unsubscribe subscription
+        Ocamlot_infrastructure_nats.Nats_client.unsubscribe subscription
       with
       | _ -> Lwt.return_unit
     ) !(bridge_state.connection.subscriptions) in
     
     (* Disconnect client *)
     let* () = match bridge_state.connection.client with
-      | Some client -> Ocamlot_nats.Nats.disconnect client
+      | Some client -> Ocamlot_infrastructure_nats.Nats_client.disconnect client
       | None -> Lwt.return_unit
     in
     
@@ -284,4 +284,4 @@ let default_config = {
     "market.analytics.*";
   ];
   connection_timeout_ms = 5000;
-}
+} *)

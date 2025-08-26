@@ -1,0 +1,5 @@
+(library
+ (public_name ocamlot.infrastructure.redis)
+ (name ocamlot_infrastructure_redis)
+ (libraries angstrom base zarith)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

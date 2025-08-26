@@ -1,5 +1,5 @@
 open Base
-open Lwt.Syntax
+(* open Lwt.Syntax *)
 open Ocamlot_core_types
 open Ocamlot_core_domain
 open Ocamlot_oms_core

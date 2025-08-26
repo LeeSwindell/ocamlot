@@ -3,4 +3,4 @@
  (name ocamlot_core_domain)
  (libraries base ocamlot_core_types)
  (preprocess
-  (pps ppx_deriving.show)))
+  (pps ppx_deriving.show ppx_deriving_yojson)))

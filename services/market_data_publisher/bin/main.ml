@@ -1,11 +1,11 @@
-open Base
+(* open Base
 open Lwt.Syntax
 open Stdio
 
-module Conflation = Ocamlot_market_data.Conflation
-module Analytics = Ocamlot_market_data.Analytics
-module Feed = Ocamlot_market_data.Feed
-module Nats = Ocamlot_nats.Nats
+module Conflation = Ocamlot_market_data_core.Conflation
+module Analytics = Ocamlot_market_data_core.Analytics
+module Feed = Ocamlot_market_data_core.Feed
+module Nats = Ocamlot_infrastructure_nats.Nats
 
 (* Market Data Publisher Service *)
 (* Generates synthetic market data and publishes to NATS *)
@@ -67,7 +67,7 @@ let generate_and_publish_data client profiles =
       let market_snapshot = Feed.generate_market_snapshot profiles in
       
       (* Create conflated bars from the raw market data *)
-      let bars = List.mapi market_snapshot ~f:(fun i tick ->
+      let bars = List.mapi market_snapshot ~f:(fun _i tick ->
         let bar : Conflation.ohlcv_bar = {
           instrument_id = tick.instrument_id;
           interval = Conflation.Seconds 1;
@@ -78,9 +78,7 @@ let generate_and_publish_data client profiles =
           volume = tick.volume;
           vwap = tick.last_price;
           trade_count = Int.of_float (tick.volume /. 100.0);
-          open_timestamp = tick.timestamp;
-          close_timestamp = tick.timestamp +. 1.0;
-          sequence = Int64.of_int (iteration * 1000 + i);
+          timestamp = tick.timestamp;
         } in
         bar
       ) in
@@ -106,7 +104,7 @@ let generate_and_publish_data client profiles =
         try%lwt
           let analytics : Analytics.symbol_analytics = {
             instrument_id = bar.instrument_id;
-            timestamp = bar.close_timestamp;
+            timestamp = bar.timestamp;
             sma_10 = None; sma_20 = None; sma_50 = None;
             ema_10 = None; ema_20 = None;
             bollinger_20_2 = Some { 
@@ -184,4 +182,4 @@ let () =
     let profiles = create_market_data_system () in
     let* client = connect_to_nats () in
     generate_and_publish_data client profiles
-  )
+  ) *)

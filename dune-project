@@ -22,6 +22,7 @@
   alcotest
   alcotest-lwt
   ppx_deriving_yojson
+  zarith
   ; Web and JavaScript compilation dependencies
   js_of_ocaml
   js_of_ocaml-lwt

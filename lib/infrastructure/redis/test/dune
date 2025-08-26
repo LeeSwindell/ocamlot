@@ -1,0 +1,4 @@
+(test
+ (name test_resp3)
+ (libraries alcotest ocamlot_infrastructure_redis)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

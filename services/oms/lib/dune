@@ -3,6 +3,7 @@
  (libraries 
   base 
   lwt 
+  unix
   yojson
   ppx_deriving_yojson.runtime
   ocamlot_core_types 
@@ -11,4 +12,4 @@
   ocamlot_oms_core
   ocamlot_infrastructure_nats)
  (preprocess
-  (pps lwt_ppx ppx_deriving_yojson)))
+  (pps lwt_ppx ppx_deriving.show ppx_deriving_yojson)))

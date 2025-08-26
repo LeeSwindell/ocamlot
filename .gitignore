@@ -275,3 +275,7 @@ nats-server.pid
 *.prof
 perf.data*
 callgrind.out.*
+
+# Agents
+claude.md
+.claude/

@@ -56,7 +56,7 @@ let calculate_stress_test ~positions ~scenario =
   )
 
 let calculate_exposure ~positions =
-  let long_exposure, short_exposure = 
+  let _long_exposure, _short_exposure = 
     List.fold positions ~init:(0.0, 0.0) ~f:(fun (long, short) (_, value, qty) ->
       if Float.(qty > 0.0) then
         (long +. value, short)

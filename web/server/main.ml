@@ -1,4 +1,4 @@
-open Lwt.Syntax
+(* open Lwt.Syntax
 module Web_types = Ocamlot_web.Web_types
 open Web_types
 module Nats_bridge = Ocamlot_web.Nats_bridge
@@ -283,4 +283,4 @@ let () =
     Dream.post "/api/start" api_start_simulation;
     Dream.post "/api/stop" api_stop_simulation;
     Dream.get "/**" serve_static;
-  ]
+  ] *)

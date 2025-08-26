@@ -7,7 +7,7 @@ type order_status =
   | Filled of { filled_qty: Types.decimal; avg_price: Types.decimal }
   | Cancelled
   | Rejected of string
-  [@@deriving show]
+  [@@deriving show, yojson]
 
 type order = {
   id: Types.order_id;
@@ -19,7 +19,7 @@ type order = {
   status: order_status;
   created_at: Types.timestamp;
   updated_at: Types.timestamp;
-} [@@deriving show]
+} [@@deriving show, yojson]
 
 let create_order ~id ~client_id ~instrument_id ~side ~order_type ~quantity ~timestamp =
   {

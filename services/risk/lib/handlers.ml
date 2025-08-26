@@ -5,12 +5,32 @@ open Ocamlot_core_domain
 open Ocamlot_risk_core
 open Ocamlot_infrastructure_nats
 
-let handle_risk_check_request state nats_client request =
-  let order_id = request##order_id in
-  let account_id = request##account_id in
-  let instrument_id = request##instrument in
-  let quantity = request##quantity in
-  let side = match request##side with
+type risk_check_request = {
+  order_id: string;
+  account_id: string;
+  instrument: string;
+  quantity: float;
+  side: string;
+} [@@deriving yojson]
+
+type position_update_request = {
+  account_id: string;
+  instrument_id: string;
+  quantity: float;
+  side: string;
+  price: float;
+} [@@deriving yojson]
+
+let handle_risk_check_request state nats_client request_json =
+  let request = match risk_check_request_of_yojson (Yojson.Safe.from_string request_json) with
+    | Ok req -> req
+    | Error _ -> failwith "Invalid risk check request"
+  in
+  let order_id = request.order_id in
+  let account_id = request.account_id in
+  let instrument_id = request.instrument in
+  let quantity = request.quantity in
+  let side = match request.side with
     | "buy" -> Types.Buy
     | _ -> Types.Sell
   in
@@ -23,7 +43,7 @@ let handle_risk_check_request state nats_client request =
     ~side
     ~order_type:(Types.Market)  (* Assume market for risk check *)
     ~quantity
-    ~timestamp:(Unix.time ())
+    ~timestamp:(Unix.gettimeofday ())
   in
   
   let portfolio = State.get_portfolio_state state account_id in
@@ -44,62 +64,89 @@ let handle_risk_check_request state nats_client request =
     ("order_id", `String order_id);
     ("passed", `Bool passed);
     ("result", `String (Checks.show_risk_result result));
-    ("timestamp", `Float (Unix.time ()));
+    ("timestamp", `Float (Unix.gettimeofday ()));
   ]) in
   
-  let* () = Nats_client.publish nats_client
+  let* () = Nats_client.publish_string nats_client
     ~subject:(Printf.sprintf "risk.check_response.%s" order_id)
-    ~payload:response_json
+    response_json
   in
   
   (* Also publish to general risk events stream *)
-  let* () = Nats_client.publish nats_client
+  let* () = Nats_client.publish_string nats_client
     ~subject:"risk.events"
-    ~payload:response_json
+    response_json
   in
   
   Lwt.return (Ok result)
 
-let handle_position_update state request =
-  let account_id = request##account_id in
-  let instrument_id = request##instrument_id in
-  let quantity = request##quantity in
-  let side = match request##side with
+let handle_position_update state request_json =
+  let request = match position_update_request_of_yojson (Yojson.Safe.from_string request_json) with
+    | Ok req -> req
+    | Error _ -> failwith "Invalid position update request"
+  in
+  let account_id = request.account_id in
+  let instrument_id = request.instrument_id in
+  let quantity = request.quantity in
+  let side = match request.side with
     | "buy" -> Types.Buy
     | _ -> Types.Sell
   in
-  let price = request##price in
+  let price = request.price in
   
   State.update_position state account_id ~instrument_id ~quantity ~side ~price;
   Lwt.return_unit
 
-let handle_market_data_update state update =
-  let instrument_id = update##instrument_id in
-  let price = (update##bid +. update##ask) /. 2.0 in
+type market_data_update = {
+  instrument_id: string;
+  bid: float;
+  ask: float;
+} [@@deriving yojson]
+
+type limits_update = {
+  account_id: string;
+  max_order_size: float;
+  max_daily_volume: float;
+  max_position_size: float;
+  max_notional_exposure: float;
+  concentration_limit: float;
+} [@@deriving yojson]
+
+let handle_market_data_update state update_json =
+  let update = match market_data_update_of_yojson (Yojson.Safe.from_string update_json) with
+    | Ok upd -> upd
+    | Error _ -> failwith "Invalid market data update"
+  in
+  let instrument_id = update.instrument_id in
+  let price = (update.bid +. update.ask) /. 2.0 in
   State.update_market_price state instrument_id price;
   Lwt.return_unit
 
-let handle_limits_update state nats_client update =
-  let account_id = update##account_id in
+let handle_limits_update state nats_client update_json =
+  let update = match limits_update_of_yojson (Yojson.Safe.from_string update_json) with
+    | Ok upd -> upd
+    | Error _ -> failwith "Invalid limits update"
+  in
+  let account_id = update.account_id in
   let new_limits = Checks.{
-    max_order_size = update##max_order_size;
-    max_daily_volume = update##max_daily_volume;
-    max_position_size = update##max_position_size;
-    max_notional_exposure = update##max_notional_exposure;
-    concentration_limit = update##concentration_limit;
+    max_order_size = update.max_order_size;
+    max_daily_volume = update.max_daily_volume;
+    max_position_size = update.max_position_size;
+    max_notional_exposure = update.max_notional_exposure;
+    concentration_limit = update.concentration_limit;
   } in
   
-  Hashtbl.set state.limits ~key:account_id ~data:new_limits;
+  State.update_limits state account_id new_limits;
   
   let response_json = Yojson.Safe.to_string (`Assoc [
     ("account_id", `String account_id);
     ("status", `String "limits_updated");
-    ("timestamp", `Float (Unix.time ()));
+    ("timestamp", `Float (Unix.gettimeofday ()));
   ]) in
   
-  let* () = Nats_client.publish nats_client
+  let* () = Nats_client.publish_string nats_client
     ~subject:"risk.limits.updated"
-    ~payload:response_json
+    response_json
   in
   
   Lwt.return_unit

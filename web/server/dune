@@ -1,6 +1,6 @@
 (executable
  (public_name ocamlot-web-server)
  (name main)
- (libraries lwt lwt.unix dream ocamlot_web ocamlot_infrastructure_nats ocamlot_market_data_core)
+ (libraries lwt lwt.unix dream ocamlot_web ocamlot_infrastructure_nats ocamlot_market_data_core yojson ppx_deriving_yojson.runtime)
  (preprocess
-  (pps lwt_ppx)))
+  (pps lwt_ppx ppx_deriving.show ppx_deriving_yojson)))

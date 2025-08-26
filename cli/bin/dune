@@ -1,6 +1,0 @@
-(executable
- (public_name ocamlot)
- (name main)
- (libraries base core lwt cmdliner logs logs.fmt fmt)
- (preprocess
-  (pps lwt_ppx)))

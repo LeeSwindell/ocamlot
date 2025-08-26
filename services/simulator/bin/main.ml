@@ -1,7 +1,7 @@
-open Base
+(* open Base
 open Lwt.Syntax
-open Simulator_service
-
+open Simulator_service *)
+(* 
 let create_default_instruments () = 
   let open Generator in
   [
@@ -37,7 +37,7 @@ let create_state instruments =
   { instruments; current_prices; is_running = true; ticks_generated = 0 }
 
 let publish_market_data nats_client state ~dt =
-  let timestamp = Unix.time () in
+  let timestamp = Unix.gettimeofday () in
   
   let* () = Lwt_list.iter_p (fun instrument ->
     let current_price = Hashtbl.find_exn state.current_prices instrument.Generator.symbol in
@@ -46,17 +46,17 @@ let publish_market_data nats_client state ~dt =
     
     (* Publish quote *)
     let quote = Generator.generate_quote instrument ~current_price:new_price ~timestamp in
-    let* () = Ocamlot_infrastructure_nats.Nats_client.publish nats_client
+    let* () = Ocamlot_infrastructure_nats.Nats_client.publish_string nats_client
       ~subject:(Printf.sprintf "market.data.quote.%s" instrument.symbol)
-      ~payload:(Yojson.Safe.to_string quote)
+      (Yojson.Safe.to_string quote)
     in
     
     (* Occasionally publish trades *)
-    if Random.float 1.0 < 0.3 then
+    if Float.(Random.float 1.0 < 0.3) then
       let trade = Generator.generate_trade instrument ~current_price:new_price ~timestamp in
-      Ocamlot_infrastructure_nats.Nats_client.publish nats_client
+      Ocamlot_infrastructure_nats.Nats_client.publish_string nats_client
         ~subject:(Printf.sprintf "market.data.trade.%s" instrument.symbol)
-        ~payload:(Yojson.Safe.to_string trade)
+        (Yojson.Safe.to_string trade)
     else
       Lwt.return_unit
   ) state.instruments in
@@ -134,7 +134,7 @@ let start_server () =
     heartbeat ()
   ] in
   
-  Lwt.return_unit
-
+  Lwt.return_unit *)
+(* 
 let () =
-  Lwt_main.run (start_server ())
+  Lwt_main.run (start_server ()) *)
