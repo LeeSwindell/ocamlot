@@ -1,4 +1,5 @@
 (test
  (name test_resp3)
+ (modules test_resp3 test_resp3_parsers test_resp3_serializers)
  (libraries alcotest ocamlot_infrastructure_redis)
  (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

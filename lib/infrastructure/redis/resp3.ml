@@ -215,3 +215,58 @@ let _parse_from_channel ic =
   in
   let input = read_all "" in
   parse_string input
+
+(* The construct below uses mutual recursion among the helper functions. This is needed since an Arry may need to be serialized for each element, which could contain maps, that in turn have their own elements, and so on. *)
+
+(* Serializer to RESP3 formatted strings. *)
+let rec serialize_resp3 = function
+  | SimpleString s -> "+" ^ s ^ "\r\n"
+  | SimpleError s -> "-" ^ s ^ "\r\n"
+  | Integer i -> ":" ^ Int64.to_string i ^ "\r\n"
+  | BulkString (Some s) -> 
+      "$" ^ string_of_int (String.length s) ^ "\r\n" ^ s ^ "\r\n"
+  | BulkString None -> "$-1\r\n"
+  | Array (Some items) -> serialize_array items
+  | Array None -> "*-1\r\n"
+  | Null -> "_\r\n"
+  | Boolean true -> "#t\r\n"
+  | Boolean false -> "#f\r\n"
+  | Double f -> serialize_double f
+  | BigNumber z -> "(" ^ Z.to_string z ^ "\r\n"
+  | BulkError s -> 
+      "!" ^ string_of_int (String.length s) ^ "\r\n" ^ s ^ "\r\n"
+  | VerbatimString {format; content} ->
+      let total_len = String.length format + 1 + String.length content in
+      "=" ^ string_of_int total_len ^ "\r\n" ^ format ^ ":" ^ content ^ "\r\n"
+  | Map pairs -> serialize_map pairs
+  | Attribute {attrs; value} -> serialize_attribute attrs value
+  | Set items -> serialize_set items
+  | Push {kind; data} -> serialize_push kind data
+
+and serialize_double f =
+  if Float.is_integer f then
+    "," ^ string_of_int (int_of_float f) ^ "\r\n"
+  else
+    "," ^ string_of_float f ^ "\r\n"
+
+and serialize_array items = 
+  "*" ^ string_of_int (List.length items) ^ "\r\n" ^
+  String.concat "" (List.map serialize_resp3 items)
+
+and serialize_map pairs =
+  "%" ^ string_of_int (List.length pairs) ^ "\r\n" ^
+  String.concat "" (List.fold_left (fun acc (k, v) -> acc @ [k; v]) [] pairs |> List.map serialize_resp3)
+
+and serialize_attribute attrs value =
+  "|" ^ string_of_int (List.length attrs) ^ "\r\n" ^
+  String.concat "" (List.fold_left (fun acc (k, v) -> acc @ [k; v]) [] attrs |> List.map serialize_resp3) ^
+  serialize_resp3 value
+
+and serialize_set items =
+  "~" ^ string_of_int (List.length items) ^ "\r\n" ^
+  String.concat "" (List.map serialize_resp3 items)
+
+and serialize_push kind data =
+  ">" ^ string_of_int (1 + List.length data) ^ "\r\n" ^
+  serialize_resp3 (BulkString (Some kind)) ^
+  String.concat "" (List.map serialize_resp3 data)

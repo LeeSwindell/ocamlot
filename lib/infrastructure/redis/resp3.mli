@@ -19,3 +19,6 @@ type resp_value =
 
 (* Export the parsing function *)
 val parse_string : string -> (resp_value, string) result
+
+(* Export the serialization function *)
+val serialize_resp3 : resp_value -> string
