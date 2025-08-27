@@ -1,18 +1,18 @@
-# OCamlot - Type-Safe Trading System
+# OCamlot - Trading System in OCaml
 
-A comprehensive trading system built in OCaml featuring order management, risk checks, FIX protocol support, market data handling, and a pure OCaml NATS client implementation.
+A trading system written in OCaml with order management, risk checks, FIX protocol support, market data handling, and a Redis client.
 
 ## Features
 
-- **Pure OCaml NATS Client**: Battle-tested messaging with full protocol implementation
-- **Order Management System**: Type-safe order lifecycle management
-- **Risk Management**: Real-time risk checks and position monitoring
-- **FIX Protocol Support**: Industry-standard FIX messaging
-- **Market Data Handling**: Real-time and historical market data processing
-- **Event-Driven Architecture**: Reliable messaging with NATS and JetStream
-- **Comprehensive Testing**: Test-driven development with 25+ passing tests
+- **Redis Client**: OCaml implementation of the RESP3 protocol
+- **Order Management**: Handles order lifecycle and state transitions
+- **Risk Management**: Checks positions and risk limits
+- **FIX Protocol**: Supports FIX messaging for trading
+- **Market Data**: Processes market data feeds
+- **Caching**: Uses Redis for caching market data and order state
+- **Testing**: Includes test suite for core functionality
 
-## Key OCaml Type Safety Features
+## OCaml Type System Usage
 
 ### Sum Types for Data Formats
 ```ocaml
@@ -34,7 +34,7 @@ type generation_style =
   | BrownianMotion of { drift : float; volatility : float; dt : float }
 ```
 
-The compiler ensures all cases are handled, making it impossible to forget to implement support for a new format or algorithm.
+The compiler checks that all cases are handled when pattern matching.
 
 ## Quick Start
 
@@ -48,13 +48,13 @@ The compiler ensures all cases are handled, making it impossible to forget to im
 # Install dependencies
 opam install --deps-only .
 
-# Start infrastructure (NATS + Redis)
+# Start infrastructure (Redis + supporting services)
 make infra-up
 
-# Start all services with hot reload
+# Start all services with file watching
 make overmind-start
 
-# Connect to running services to see logs
+# View service logs
 overmind connect
 ```
 
@@ -65,28 +65,28 @@ overmind connect
 # Build the project
 make build
 
-# Run tests (without external services)
+# Run tests
 make test
 
-# Development workflow with hot reload
+# Development workflow
 make overmind-start     # Start all services
-overmind connect        # View logs and interact
-overmind stop          # Stop all services
+overmind connect        # View logs
+overmind stop          # Stop services
 
-# Infrastructure management
-make infra-up          # Start NATS + Redis
+# Infrastructure
+make infra-up          # Start Redis + supporting services
 make infra-down        # Stop infrastructure
 make infra-monitor     # Start with monitoring UI
-make infra-metrics     # Start with metrics (Grafana/Prometheus)
+make infra-metrics     # Start with Grafana/Prometheus
 ```
 
 ## Infrastructure Services
 
 When running `make infra-up`, the following services are available:
 
-- **NATS Server**: `nats://localhost:4222`
-- **NATS Monitoring**: `http://localhost:8222`
-- **Redis**: `redis://localhost:6379`
+- **Redis Server**: `redis://localhost:6379`
+- **Message Broker**: `localhost:4222`
+- **Monitoring Dashboard**: `http://localhost:8222`
 
 ### Monitoring and Metrics
 ```bash
@@ -98,49 +98,47 @@ make infra-metrics
 ```
 
 Access monitoring dashboards:
-- **NATS UI**: http://localhost:7777 (with monitoring profile)
 - **Redis Commander**: http://localhost:8081 (admin/admin, with monitoring profile)
 - **Grafana**: http://localhost:3000 (admin/admin, with metrics profile)
 - **Prometheus**: http://localhost:9090 (with metrics profile)
 
 ## Development Workflow
 
-### Overmind Process Management
+### Process Management with Overmind
 
-OCamlot uses [Overmind](https://github.com/DarthSim/overmind) for managing development processes with hot reload:
+We use [Overmind](https://github.com/DarthSim/overmind) to manage development processes:
 
 ```bash
-# Start infrastructure and all services
+# Start everything
 make overmind-start
 
-# In another terminal, connect to see logs
+# View logs in another terminal
 overmind connect
 
-# Development workflow:
-# 1. Edit code files
-# 2. watcher rebuilds automatically 
-# 3. Restart services: overmind restart web
-# 4. View changes at http://localhost:8080
+# After editing code:
+# 1. Files are automatically rebuilt by the watcher
+# 2. Restart the service: overmind restart web
+# 3. Check changes at http://localhost:8080
 
 # Stop everything
 make overmind-stop
 ```
 
 Services managed by Overmind:
-- **watcher**: Single dune process that rebuilds on file changes
-- **web**: Web server with WebSocket interface (`http://localhost:8080`)
-- **market-data**: Market data publisher (publishes to NATS)
+- **watcher**: Runs `dune build --watch` to rebuild on file changes
+- **web**: Web server on port 8080
+- **market-data**: Market data publisher
 
-> **Note**: This setup avoids dune build lock conflicts by using a single `dune build --watch` process. After code changes, manually restart individual services with `overmind restart <service>`.
+Note: We use a single `dune build --watch` process to avoid build lock issues. After changes rebuild, restart services manually with `overmind restart <service>`.
 
 ### Environment Configuration
 
-Environment variables are configured in `.overmind.env`:
-- `NATS_HOST=localhost` - NATS server hostname (resolves to Docker container)
-- `NATS_PORT=4222` - NATS client port
+Environment variables are in `.overmind.env`:
+- `REDIS_HOST=localhost` - Redis server hostname
+- `REDIS_PORT=6379` - Redis port
 - `WEB_PORT=8080` - Web server port
 
-The OCaml services connect to Docker infrastructure running on localhost ports.
+Services connect to Docker containers via localhost ports.
 
 ## Example Configuration
 
@@ -168,42 +166,54 @@ The OCaml services connect to Docker infrastructure running on localhost ports.
 
 ### Core Components
 
-- **`nats/`** - Pure OCaml NATS client implementation
-- **`messaging/`** - Event-driven messaging layer built on NATS
-- **`core/`** - Order types and core trading logic
+- **`redis/`** - Redis client implementation
+- **`messaging/`** - Message handling 
+- **`core/`** - Order types and trading logic
 - **`oms/`** - Order Management System
-- **`risk/`** - Risk management and position monitoring
-- **`fix/`** - FIX protocol implementation
-- **`market_data/`** - Market data feed handling
-- **`sim/`** - Trading simulation engine
+- **`risk/`** - Risk checks and position tracking
+- **`fix/`** - FIX protocol support
+- **`market_data/`** - Market data processing
+- **`sim/`** - Trading simulator
 
-### NATS Client Implementation
+## Redis Client
 
-Our pure OCaml NATS client provides:
+The Redis client is written in OCaml and implements the RESP3 protocol.
 
-- **Full Protocol Support**: CONNECT, PUB, SUB, UNSUB, PING/PONG
-- **JetStream Ready**: Architecture prepared for JetStream features
-- **Type Safety**: Leverages OCaml's type system for protocol correctness
-- **No External Dependencies**: Pure OCaml implementation (no C FFI)
-- **Test-Driven Development**: 25+ tests covering all functionality
+### Features
+- **RESP3 Protocol**: Implements Redis Serialization Protocol version 3
+- **Connection Management**: Handles connections and reconnection
+- **Command Pipelining**: Can batch multiple commands together
+- **Type Safety**: Uses OCaml's type system for command validation
+- **No C Dependencies**: Written entirely in OCaml
+- **Buffered Parser**: Uses buffering for parsing RESP3 responses
 
-### Testing Strategy
+### Supported Commands
+- **Connection**: PING, AUTH, SELECT, QUIT
+- **String Operations**: GET, SET, MGET, MSET, INCR, DECR, APPEND
+- **Key Management**: EXISTS, DEL, EXPIRE, TTL, KEYS, SCAN
+- **List Operations**: LPUSH, RPUSH, LPOP, RPOP, LRANGE, LLEN
+- **Hash Operations**: HSET, HGET, HMSET, HMGET, HGETALL, HDEL
+- **Set Operations**: SADD, SREM, SMEMBERS, SISMEMBER, SCARD
+- **Sorted Sets**: ZADD, ZREM, ZRANGE, ZRANK, ZSCORE
+- **Pub/Sub**: PUBLISH, SUBSCRIBE, UNSUBSCRIBE, PSUBSCRIBE
+- **Transactions**: MULTI, EXEC, DISCARD, WATCH
+- **Streams**: XADD, XREAD, XRANGE (RESP3 native support)
 
-**✅ Passing Tests (25 total)**
-- Core NATS functionality (21 tests)
-- Basic protocol tests (4 tests)
+### Testing
 
-**🚧 TDD Structure Created**
-- Advanced connection tests (18 test structures)
-- Advanced subscription tests (16 test structures)  
-- JetStream tests (17 test structures)
+The test suite includes:
+- Redis functionality tests
+- RESP3 serialization/deserialization tests
+- Connection handling tests
+- Command pipelining tests
+- Error handling tests
 
-Run `make test-core` to see all passing tests in action!
+Run `make test` to run the tests.
 
-## Type Safety Benefits
+## Why OCaml
 
-1. **Exhaustive Pattern Matching**: The compiler ensures all variants of sum types are handled
-2. **Configuration Validation**: Invalid configurations are caught at parse time
-3. **No Runtime Type Errors**: Strong typing prevents many classes of runtime errors
-4. **Event Safety**: Type-safe event handling with impossible invalid states
-5. **Protocol Correctness**: NATS protocol implementation verified by types
+1. **Pattern Matching**: The compiler ensures all variant cases are handled
+2. **Configuration Validation**: Invalid configurations are caught at compile time
+3. **Type Safety**: The type system catches many errors before runtime
+4. **Sum Types**: Makes invalid states unrepresentable
+5. **Protocol Implementation**: Types help ensure protocol correctness
