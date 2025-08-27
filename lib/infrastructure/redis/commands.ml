@@ -112,19 +112,24 @@ let move _key _db =
   (* TODO: Implementation *)
   failwith "Not implemented"
 
+(** DEL key [key ...] - Delete keys *)
+let del keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "DEL") :: key_args))
+
 (* =============================================================================
    STRING COMMANDS  
    ============================================================================= *)
 
 (** GET key - Get string value *)
-let get _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let get key =
+  Array (Some [BulkString (Some "GET"); BulkString (Some key)])
 
 (** SET key value [EX seconds] [PX milliseconds] [NX|XX] - Set string value *)
-let set _key _value ?ex:_ex ?px:_px ?nx:_nx ?xx:_xx () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let set key value ?ex:_ex ?px:_px ?nx:_nx ?xx:_xx () =
+  let base_cmd = [BulkString (Some "SET"); BulkString (Some key); BulkString (Some value)] in
+  let cmd = base_cmd in (* TODO: Add optional parameters *)
+  Array (Some cmd)
 
 (** MGET key [key ...] - Get multiple values *)
 let mget _keys =
@@ -162,9 +167,8 @@ let psetex _key _milliseconds _value =
   failwith "Not implemented"
 
 (** INCR key - Increment integer value *)
-let incr _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let incr key =
+  Array (Some [BulkString (Some "INCR"); BulkString (Some key)])
 
 (** INCRBY key increment - Increment by amount *)
 let incrby _key _increment =
@@ -211,14 +215,16 @@ let setrange _key _offset _value =
    ============================================================================= *)
 
 (** HGET key field - Get hash field value *)
-let hget _key _field =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hget key field =
+  Array (Some [BulkString (Some "HGET"); BulkString (Some key); BulkString (Some field)])
 
 (** HSET key field value [field value ...] - Set hash fields *)
-let hset _key _field_values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hset key field_values =
+  let field_value_args = List.fold_right (fun (field, value) acc ->
+      BulkString (Some field) :: BulkString (Some value) :: acc
+    ) field_values [] in
+  let cmd = BulkString (Some "HSET") :: BulkString (Some key) :: field_value_args in
+  Array (Some cmd)
 
 (** HMGET key field [field ...] - Get multiple hash fields *)
 let hmget _key _fields =

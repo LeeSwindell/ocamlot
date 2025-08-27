@@ -48,4 +48,32 @@ let () =
     
     (* Command tests *)
     "commands: ping", all_ping_tests;
+    "commands: get", get_command_tests;
+    "commands: set", set_command_tests;
+    "commands: hget", hget_command_tests;
+    "commands: hset", hset_command_tests;
+    "commands: incr", incr_command_tests;
+    "commands: del", del_command_tests;
+    "commands: edge cases", edge_case_tests;
+    
+    (* RESP3 data type tests *)
+    "resp3: boolean responses", boolean_response_tests;
+    "resp3: double responses", double_response_tests;
+    "resp3: map responses", map_response_tests;
+    "resp3: set responses", set_response_tests;
+    "resp3: integer responses", integer_response_tests;
+    "resp3: null responses", null_response_tests;
+    "resp3: mixed arrays", mixed_array_tests;
+    "resp3: protocol compliance", resp3_compliance_tests;
+    
+    (* Comprehensive command category tests *)
+    "commands: connection & server", connection_server_tests;
+    "commands: key management", key_management_tests;
+    "commands: strings extended", string_command_tests;
+    "commands: hashes extended", hash_command_tests;
+    "commands: lists", list_command_tests;
+    "commands: sets", redis_set_command_tests;
+    "commands: sorted sets", sorted_set_command_tests;
+    "commands: pub/sub", pubsub_command_tests;
+    "commands: transactions", transaction_command_tests;
   ]
