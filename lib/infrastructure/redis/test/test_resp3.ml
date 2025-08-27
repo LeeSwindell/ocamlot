@@ -2,6 +2,7 @@ open Alcotest
 open Test_resp3_parsers
 open Test_resp3_serializers
 open Test_connection
+open Test_commands
 
 let () =
   run "RESP3 and Connection Tests" [
@@ -44,4 +45,7 @@ let () =
     (* Connection tests *)
     "connection: basic", connection_tests;
     "connection: advanced", advanced_connection_tests;
+    
+    (* Command tests *)
+    "commands: ping", all_ping_tests;
   ]

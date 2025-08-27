@@ -1,5 +1,5 @@
 (test
  (name test_resp3)
- (modules test_resp3 test_resp3_parsers test_resp3_serializers test_connection)
+ (modules test_resp3 test_resp3_parsers test_resp3_serializers test_connection test_commands)
  (libraries alcotest lwt lwt.unix ocamlot_infrastructure_redis)
  (preprocess (pps lwt_ppx ppx_deriving.show ppx_deriving.eq)))
