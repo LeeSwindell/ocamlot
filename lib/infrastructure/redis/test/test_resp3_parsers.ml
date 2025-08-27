@@ -274,3 +274,74 @@ let invalid_parser_tests = [
   test "only CR" "\r" (Error "invalid prefix: Invalid RESP format - Unknown prefix: \r");
   test "only LF" "\n" (Error "invalid prefix: Invalid RESP format - Unknown prefix: \n");
 ]
+
+let buffered_parser_tests = [
+  test_case "parse complete message in one chunk" `Quick (fun () ->
+    let data = ref "*1\r\n$4\r\nPING\r\n" in
+    let reader () = 
+      let chunk = !data in
+      data := "";
+      Lwt.return chunk in
+    let res = Lwt_main.run (parse_resp_buffered reader) in
+    check (result resp_value_testable string) "complete message" 
+      (Ok (Array (Some [BulkString (Some "PING")]))) res
+  );
+  
+  test_case "parse message split across chunks" `Quick (fun () ->
+    let chunks = ref ["*1\r\n"; "$4\r\n"; "PING"; "\r\n"] in
+    let reader () = 
+      match !chunks with
+      | [] -> Lwt.return ""
+      | h::t -> chunks := t; Lwt.return h in
+    let res = Lwt_main.run (parse_resp_buffered reader) in
+    check (result resp_value_testable string) "split message" 
+      (Ok (Array (Some [BulkString (Some "PING")]))) res
+  );
+  
+  test_case "parse with trailing data" `Quick (fun () ->
+    let data = ref "+PONG\r\n+EXTRA\r\n" in
+    let reader () = 
+      let chunk = !data in
+      data := "";
+      Lwt.return chunk in
+    let res = Lwt_main.run (parse_resp_buffered reader) in
+    (* Should only parse first message, leave rest unconsumed *)
+    check (result resp_value_testable string) "first message only" 
+      (Ok (SimpleString "PONG")) res
+  );
+  
+  test_case "handle EOF mid-message" `Quick (fun () ->
+    let chunks = ref ["*1\r\n$4\r\n"] in
+    let reader () = 
+      match !chunks with
+      | [] -> Lwt.return ""
+      | h::t -> chunks := t; Lwt.return h in
+    let res = Lwt_main.run (parse_resp_buffered reader) in
+    check (result resp_value_testable string) "incomplete message" 
+      (Error "Incomplete RESP message") res
+  );
+  
+  test_case "byte-by-byte parsing" `Quick (fun () ->
+    let data = ref (String.to_seq "+OK\r\n" |> List.of_seq |> List.map (String.make 1)) in
+    let reader () = 
+      match !data with
+      | [] -> Lwt.return ""
+      | h::t -> data := t; Lwt.return h in
+    let res = Lwt_main.run (parse_resp_buffered reader) in
+    check (result resp_value_testable string) "byte by byte" 
+      (Ok (SimpleString "OK")) res
+  );
+
+  (* Test that buffered parser handles binary data correctly *)
+  test_case "binary data with nulls" `Quick (fun () ->
+    let binary = "\x00\x01\x02\x03" in
+    let data = ref (Printf.sprintf "$4\r\n%s\r\n" binary) in
+    let reader () = 
+      let chunk = !data in
+      data := "";
+      Lwt.return chunk in
+    let res = Lwt_main.run (parse_resp_buffered reader) in
+    check (result resp_value_testable string) "binary with nulls"
+      (Ok (BulkString (Some binary))) res
+  );
+]

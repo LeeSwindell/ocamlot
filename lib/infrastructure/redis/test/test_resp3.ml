@@ -1,9 +1,10 @@
 open Alcotest
 open Test_resp3_parsers
 open Test_resp3_serializers
+open Test_connection
 
 let () =
-  run "RESP3 Tests" [
+  run "RESP3 and Connection Tests" [
     (* Parser tests *)
     "parser: simple string", simple_string_parser_tests;
     "parser: simple error", simple_error_parser_tests;
@@ -21,6 +22,7 @@ let () =
     "parser: set", set_parser_tests;
     "parser: push", push_parser_tests;
     "parser: invalid", invalid_parser_tests;
+    "buffered parser: all", buffered_parser_tests;
     
     (* Serializer tests *)
     "serializer: simple string", simple_string_serializer_tests;
@@ -38,4 +40,8 @@ let () =
     "serializer: attribute", attribute_serializer_tests;
     "serializer: set", set_serializer_tests;
     "serializer: push", push_serializer_tests;
+    
+    (* Connection tests *)
+    "connection: basic", connection_tests;
+    "connection: advanced", advanced_connection_tests;
   ]

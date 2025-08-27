@@ -1,4 +1,5 @@
 open Angstrom
+open Lwt.Syntax
 module B = Base
 
 let pp_z fmt z = Stdlib.Format.fprintf fmt "%s" (Z.to_string z)
@@ -110,7 +111,7 @@ let parse_push_body self =
         Push {kind; data}
     | _ -> fail "Push kind must be a string"
 
-(* Main parser using choice *)
+(* Main parser, matching on the first char *)
 let parse_resp =
   fix (fun self ->
     peek_char >>= function
@@ -193,6 +194,58 @@ let parse_resp =
           <?> "invalid prefix"
   )
 
+let parse_resp_buffered (reader : unit -> string Lwt.t) : (resp_value, string) result Lwt.t =
+  (* This is a recursive function that handles the parsing state machine *)
+  let rec parse_with_state state =
+    match state with
+    
+    (* CASE 1: Parser successfully completed parsing a value *)
+    | Buffered.Done (_unconsumed, value) ->
+        (* _unconsumed: any leftover bytes after parsing this value *)
+        (* value: the successfully parsed RESP value *)
+        Lwt.return_ok value  (* Wrap in Ok and return as Lwt promise *)
+    
+    (* CASE 2: Parser needs more data to continue *)
+    | Buffered.Partial continue ->
+        (* continue: a function that accepts more data and returns new state *)
+        (* We wrap in try-catch to handle IO errors *)
+        Lwt.catch
+          (fun () ->
+            (* Call the reader function to get more bytes *)
+            let* chunk = reader () in  (* This blocks until data arrives *)
+            
+            (* Check if we got EOF (empty string) *)
+            if String.length chunk = 0 then
+              (* Tell parser there's no more data coming *)
+              match continue `Eof with
+              | Buffered.Done (_, value) -> 
+                  (* Parser had enough data to complete *)
+                  Lwt.return_ok value
+              | _ -> 
+                  (* Parser still needed more data - protocol error *)
+                  Lwt.return_error "Incomplete RESP message"
+            else
+              (* We got data, feed it to parser and recurse with new state *)
+              parse_with_state (continue (`String chunk))
+          )
+          (* Convert any exceptions to error strings *)
+          (fun exn -> Lwt.return_error (Printexc.to_string exn))
+    
+    (* CASE 3: Parser encountered an error *)
+    | Buffered.Fail (_unconsumed, _, msg) ->
+        (* _unconsumed: bytes that couldn't be parsed *)
+        (* msg: error message from the parser *)
+        Lwt.return_error msg
+  in
+  
+  (* Start the state machine with initial parser state *)
+  let initial_state = Buffered.parse parse_resp in
+  parse_with_state initial_state
+
+let parse_resp_from_channel (input : Lwt_io.input_channel) : (resp_value, string) result Lwt.t =
+  let reader () = Lwt_io.read ~count:4096 input in
+  parse_resp_buffered reader
+
 (* Convenience functions *)
 let parse_string str =
   match parse_string ~consume:All parse_resp str with
@@ -204,17 +257,6 @@ let parse_string str =
   | Error msg when B.String.is_substring ~substring:"expected string \"\\r\\n\"" msg ->
       Error "Invalid line ending - expected CRLF (\\r\\n)"
   | Error msg -> Error msg
-
-let _parse_from_channel ic =
-  (* Read from channel - this is simplified, we want buffering *)
-  let rec read_all acc =
-    try
-      let line = input_line ic in
-      read_all (acc ^ line ^ "\r\n")
-    with End_of_file -> acc
-  in
-  let input = read_all "" in
-  parse_string input
 
 (* The construct below uses mutual recursion among the helper functions. This is needed since an Arry may need to be serialized for each element, which could contain maps, that in turn have their own elements, and so on. *)
 
