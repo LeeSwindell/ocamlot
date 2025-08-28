@@ -296,9 +296,9 @@ let hsetnx _key _field _value =
    ============================================================================= *)
 
 (** LPUSH key value [value ...] - Push to list head *)
-let lpush _key _values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let lpush key values =
+  let value_args = List.map (fun v -> BulkString (Some v)) values in
+  Array (Some (BulkString (Some "LPUSH") :: BulkString (Some key) :: value_args))
 
 (** RPUSH key value [value ...] - Push to list tail *)
 let rpush _key _values =
@@ -311,9 +311,8 @@ let lpop _key =
   failwith "Not implemented"
 
 (** RPOP key - Pop from list tail *)
-let rpop _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let rpop key =
+  Array (Some [BulkString (Some "RPOP"); BulkString (Some key)])
 
 (** LLEN key - Get list length *)
 let llen _key =
@@ -723,9 +722,10 @@ let unwatch () =
    ============================================================================= *)
 
 (** INFO [section] - Get server information *)
-let info ?section:_section () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let info ?section () =
+  match section with
+  | None -> Array (Some [BulkString (Some "INFO")])
+  | Some s -> Array (Some [BulkString (Some "INFO"); BulkString (Some s)])
 
 (** FLUSHDB [ASYNC] - Clear current database *)
 let flushdb ?async:_async () =

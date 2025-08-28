@@ -162,7 +162,7 @@ let pipeline client commands =
 (* High-level Redis commands *)
 
 let ping client =
-  let command = Resp3.Array (Some [Resp3.BulkString (Some "PING")]) in
+  let command = Commands.ping () in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -170,10 +170,7 @@ let ping client =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected SimpleString, got " ^ (Resp3.show_resp_value resp))))
 
 let get client key =
-  let command = Resp3.Array (Some [
-    Resp3.BulkString (Some "GET");
-    Resp3.BulkString (Some key)
-  ]) in
+  let command = Commands.get key in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -182,11 +179,7 @@ let get client key =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected BulkString, got " ^ (Resp3.show_resp_value resp))))
 
 let set client key value =
-  let command = Resp3.Array (Some [
-    Resp3.BulkString (Some "SET");
-    Resp3.BulkString (Some key);
-    Resp3.BulkString (Some value)
-  ]) in
+  let command = Commands.set key value () in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -194,8 +187,7 @@ let set client key value =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected OK, got " ^ (Resp3.show_resp_value resp))))
 
 let del client keys =
-  let key_args = List.map (fun k -> Resp3.BulkString (Some k)) keys in
-  let command = Resp3.Array (Some (Resp3.BulkString (Some "DEL") :: key_args)) in
+  let command = Commands.del keys in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -203,11 +195,7 @@ let del client keys =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected Integer, got " ^ (Resp3.show_resp_value resp))))
 
 let hget client hash field =
-  let command = Resp3.Array (Some [
-    Resp3.BulkString (Some "HGET");
-    Resp3.BulkString (Some hash);
-    Resp3.BulkString (Some field)
-  ]) in
+  let command = Commands.hget hash field in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -216,12 +204,7 @@ let hget client hash field =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected BulkString, got " ^ (Resp3.show_resp_value resp))))
 
 let hset client hash field value =
-  let command = Resp3.Array (Some [
-    Resp3.BulkString (Some "HSET");
-    Resp3.BulkString (Some hash);
-    Resp3.BulkString (Some field);
-    Resp3.BulkString (Some value)
-  ]) in
+  let command = Commands.hset hash [(field, value)] in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -230,8 +213,7 @@ let hset client hash field value =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected Integer 0 or 1, got " ^ (Resp3.show_resp_value resp))))
 
 let lpush client list values =
-  let value_args = List.map (fun v -> Resp3.BulkString (Some v)) values in
-  let command = Resp3.Array (Some (Resp3.BulkString (Some "LPUSH") :: Resp3.BulkString (Some list) :: value_args)) in
+  let command = Commands.lpush list values in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -239,10 +221,7 @@ let lpush client list values =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected Integer, got " ^ (Resp3.show_resp_value resp))))
 
 let rpop client list =
-  let command = Resp3.Array (Some [
-    Resp3.BulkString (Some "RPOP");
-    Resp3.BulkString (Some list)
-  ]) in
+  let command = Commands.rpop list in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)
@@ -251,7 +230,7 @@ let rpop client list =
   | Ok resp -> Lwt.return (Error (Parse_error ("Expected BulkString, got " ^ (Resp3.show_resp_value resp))))
 
 let info client =
-  let command = Resp3.Array (Some [Resp3.BulkString (Some "INFO")]) in
+  let command = Commands.info () in
   let* result = execute client command in
   match result with
   | Error e -> Lwt.return (Error e)

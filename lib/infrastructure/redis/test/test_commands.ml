@@ -735,7 +735,7 @@ let pubsub_command_tests = [
   test_command_serialization
     "psubscribe pattern command"
     (fun () -> Array (Some [BulkString (Some "PSUBSCRIBE"); BulkString (Some "channel.*")]))
-    "*2\r\n$10\r\nPSUBSCRIBE\r\n$10\r\nchannel.*\r\n";
+    "*2\r\n$10\r\nPSUBSCRIBE\r\n$9\r\nchannel.*\r\n";
 ]
 
 (* Transaction Commands *)

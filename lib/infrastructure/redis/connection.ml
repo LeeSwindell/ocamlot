@@ -38,7 +38,8 @@ let connect host port =
       let* () = Lwt_unix.connect socket addr in
       
       (* Step 4: Create Lwt_io channels from the connected socket *)
-      let input = Lwt_io.of_fd ~mode:Lwt_io.input socket in
+      (* Important: Only the output channel owns the socket for closing *)
+      let input = Lwt_io.of_fd ~mode:Lwt_io.input ~close:(fun () -> Lwt.return_unit) socket in
       let output = Lwt_io.of_fd ~mode:Lwt_io.output socket in
       
       Lwt.return_ok { input; output; socket })
@@ -78,8 +79,9 @@ let receive_resp handle =
 
 (* Clean shutdown using Lwt_io *)
 let close handle =
-  (* Lwt_io.close automatically closes the underlying socket *)
+  (* Close input first (doesn't close socket due to ~close parameter) *)
   let* () = Lwt_io.close handle.input in
+  (* Close output, which will close the underlying socket *)
   Lwt_io.close handle.output
 
 
