@@ -53,57 +53,60 @@ let expire key seconds =
   Array (Some [BulkString (Some "EXPIRE"); BulkString (Some key); BulkString (Some (string_of_int seconds))])
 
 (** EXPIREAT key timestamp - Set key expiration at timestamp *)
-let expireat _key _timestamp =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let expireat key timestamp =
+  Array (Some [BulkString (Some "EXPIREAT"); BulkString (Some key); BulkString (Some (Int64.to_string timestamp))])
 
 (** TTL key - Get time to live *)
 let ttl key =
   Array (Some [BulkString (Some "TTL"); BulkString (Some key)])
 
 (** PERSIST key - Remove expiration *)
-let persist _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let persist key =
+  Array (Some [BulkString (Some "PERSIST"); BulkString (Some key)])
 
 (** RENAME key newkey - Rename a key *)
 let rename key newkey =
   Array (Some [BulkString (Some "RENAME"); BulkString (Some key); BulkString (Some newkey)])
 
 (** RENAMENX key newkey - Rename key if new key doesn't exist *)
-let renamenx _key _newkey =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let renamenx key newkey =
+  Array (Some [BulkString (Some "RENAMENX"); BulkString (Some key); BulkString (Some newkey)])
 
 (** DUMP key - Serialize key value *)
-let dump _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let dump key =
+  Array (Some [BulkString (Some "DUMP"); BulkString (Some key)])
 
 (** RESTORE key ttl serialized-value - Restore serialized key *)
-let restore _key _ttl _serialized_value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let restore key ttl serialized_value ?replace () =
+  let base_cmd = [BulkString (Some "RESTORE"); BulkString (Some key); 
+                  BulkString (Some (string_of_int ttl)); BulkString (Some serialized_value)] in
+  let cmd = match replace with
+    | Some true -> base_cmd @ [BulkString (Some "REPLACE")]
+    | _ -> base_cmd in
+  Array (Some cmd)
 
 (** KEYS pattern - Find keys matching pattern *)
-let keys _pattern =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let keys pattern =
+  Array (Some [BulkString (Some "KEYS"); BulkString (Some pattern)])
 
 (** SCAN cursor [MATCH pattern] [COUNT count] - Incrementally scan keys *)
-let scan _cursor ?pattern:_pattern ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let scan cursor ?pattern ?count () =
+  let base_cmd = [BulkString (Some "SCAN"); BulkString (Some (string_of_int cursor))] in
+  let cmd_with_match = match pattern with
+    | None -> base_cmd
+    | Some p -> base_cmd @ [BulkString (Some "MATCH"); BulkString (Some p)] in
+  let final_cmd = match count with
+    | None -> cmd_with_match
+    | Some c -> cmd_with_match @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))] in
+  Array (Some final_cmd)
 
 (** RANDOMKEY - Return a random key *)
 let randomkey () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+  Array (Some [BulkString (Some "RANDOMKEY")])
 
 (** MOVE key db - Move key to another database *)
-let move _key _db =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let move key db =
+  Array (Some [BulkString (Some "MOVE"); BulkString (Some key); BulkString (Some (string_of_int db))])
 
 (** DEL key [key ...] - Delete keys *)
 let del keys =

@@ -492,6 +492,143 @@ let key_management_tests = [
     "rename command"
     (fun () -> rename "oldkey" "newkey")
     "*3\r\n$6\r\nRENAME\r\n$6\r\noldkey\r\n$6\r\nnewkey\r\n";
+
+  (* Additional key management commands *)
+  test_command_serialization
+    "expireat command"
+    (fun () -> expireat "mykey" 1640995200L)
+    "*3\r\n$8\r\nEXPIREAT\r\n$5\r\nmykey\r\n$10\r\n1640995200\r\n";
+
+  test_command_serialization
+    "persist command"
+    (fun () -> persist "mykey")
+    "*2\r\n$7\r\nPERSIST\r\n$5\r\nmykey\r\n";
+
+  test_command_serialization
+    "renamenx command"
+    (fun () -> renamenx "oldkey" "newkey")
+    "*3\r\n$8\r\nRENAMENX\r\n$6\r\noldkey\r\n$6\r\nnewkey\r\n";
+
+  test_command_serialization
+    "dump command"
+    (fun () -> dump "mykey")
+    "*2\r\n$4\r\nDUMP\r\n$5\r\nmykey\r\n";
+
+  test_command_serialization
+    "restore command"
+    (fun () -> restore "mykey" 0 "\x00\x05hello\x09\x00\x87\x2c\x97\x0b\x13\xfe\x40\x9e" ())
+    "*4\r\n$7\r\nRESTORE\r\n$5\r\nmykey\r\n$1\r\n0\r\n$17\r\n\x00\x05hello\x09\x00\x87\x2c\x97\x0b\x13\xfe\x40\x9e\r\n";
+
+  test_command_serialization
+    "restore command with replace"
+    (fun () -> restore "mykey" 0 "\x00\x05hello\x09\x00\x87\x2c\x97\x0b\x13\xfe\x40\x9e" ~replace:true ())
+    "*5\r\n$7\r\nRESTORE\r\n$5\r\nmykey\r\n$1\r\n0\r\n$17\r\n\x00\x05hello\x09\x00\x87\x2c\x97\x0b\x13\xfe\x40\x9e\r\n$7\r\nREPLACE\r\n";
+
+  test_command_serialization
+    "keys command"
+    (fun () -> keys "*")
+    "*2\r\n$4\r\nKEYS\r\n$1\r\n*\r\n";
+
+  test_command_serialization
+    "keys command with pattern"
+    (fun () -> keys "user:*")
+    "*2\r\n$4\r\nKEYS\r\n$6\r\nuser:*\r\n";
+
+  test_command_serialization
+    "scan command basic"
+    (fun () -> scan 0 ())
+    "*2\r\n$4\r\nSCAN\r\n$1\r\n0\r\n";
+
+  test_command_serialization
+    "scan command with match"
+    (fun () -> scan 0 ~pattern:"user:*" ())
+    "*4\r\n$4\r\nSCAN\r\n$1\r\n0\r\n$5\r\nMATCH\r\n$6\r\nuser:*\r\n";
+
+  test_command_serialization
+    "scan command with count"
+    (fun () -> scan 0 ~count:10 ())
+    "*4\r\n$4\r\nSCAN\r\n$1\r\n0\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "scan command with match and count"
+    (fun () -> scan 0 ~pattern:"user:*" ~count:10 ())
+    "*6\r\n$4\r\nSCAN\r\n$1\r\n0\r\n$5\r\nMATCH\r\n$6\r\nuser:*\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "randomkey command"
+    (fun () -> randomkey ())
+    "*1\r\n$9\r\nRANDOMKEY\r\n";
+
+  test_command_serialization
+    "move command"
+    (fun () -> move "mykey" 1)
+    "*3\r\n$4\r\nMOVE\r\n$5\r\nmykey\r\n$1\r\n1\r\n";
+
+  (* Test round-trip serialization for key commands *)
+  test_command_roundtrip
+    "exists keys roundtrip"
+    (fun () -> exists ["key1"; "key2"; "key3"])
+    (exists ["key1"; "key2"; "key3"]);
+
+  test_command_roundtrip
+    "type_of_key roundtrip"
+    (fun () -> type_of_key "mykey")
+    (type_of_key "mykey");
+
+  test_command_roundtrip
+    "expire roundtrip"
+    (fun () -> expire "mykey" 3600)
+    (expire "mykey" 3600);
+
+  test_command_roundtrip
+    "expireat roundtrip"
+    (fun () -> expireat "mykey" 1640995200L)
+    (expireat "mykey" 1640995200L);
+
+  test_command_roundtrip
+    "ttl roundtrip"
+    (fun () -> ttl "mykey")
+    (ttl "mykey");
+
+  test_command_roundtrip
+    "persist roundtrip"
+    (fun () -> persist "mykey")
+    (persist "mykey");
+
+  test_command_roundtrip
+    "rename roundtrip"
+    (fun () -> rename "oldkey" "newkey")
+    (rename "oldkey" "newkey");
+
+  test_command_roundtrip
+    "renamenx roundtrip"
+    (fun () -> renamenx "oldkey" "newkey")
+    (renamenx "oldkey" "newkey");
+
+  test_command_roundtrip
+    "dump roundtrip"
+    (fun () -> dump "mykey")
+    (dump "mykey");
+
+  test_command_roundtrip
+    "keys pattern roundtrip"
+    (fun () -> keys "user:*:active")
+    (keys "user:*:active");
+
+  test_command_roundtrip
+    "scan with options roundtrip"
+    (fun () -> scan 42 ~pattern:"prefix:*" ~count:100 ())
+    (scan 42 ~pattern:"prefix:*" ~count:100 ());
+
+  test_command_roundtrip
+    "randomkey roundtrip"
+    (fun () -> randomkey ())
+    (randomkey ());
+
+  test_command_roundtrip
+    "move roundtrip"
+    (fun () -> move "mykey" 5)
+    (move "mykey" 5);
 ]
 
 (* String Commands (beyond GET/SET/INCR) *)
