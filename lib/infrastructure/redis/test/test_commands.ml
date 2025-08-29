@@ -800,40 +800,150 @@ let string_command_tests = [
 let hash_command_tests = [
   test_command_serialization
     "hmget multiple fields"
-    (fun () -> Array (Some [BulkString (Some "HMGET"); BulkString (Some "myhash"); 
-                           BulkString (Some "field1"); BulkString (Some "field2")]))
+    (fun () -> hmget "myhash" ["field1"; "field2"])
     "*4\r\n$5\r\nHMGET\r\n$6\r\nmyhash\r\n$6\r\nfield1\r\n$6\r\nfield2\r\n";
     
   test_command_serialization
     "hgetall command"
-    (fun () -> Array (Some [BulkString (Some "HGETALL"); BulkString (Some "myhash")]))
+    (fun () -> hgetall "myhash")
     "*2\r\n$7\r\nHGETALL\r\n$6\r\nmyhash\r\n";
     
   test_command_serialization
     "hkeys command"
-    (fun () -> Array (Some [BulkString (Some "HKEYS"); BulkString (Some "myhash")]))
+    (fun () -> hkeys "myhash")
     "*2\r\n$5\r\nHKEYS\r\n$6\r\nmyhash\r\n";
     
   test_command_serialization
     "hvals command"
-    (fun () -> Array (Some [BulkString (Some "HVALS"); BulkString (Some "myhash")]))
+    (fun () -> hvals "myhash")
     "*2\r\n$5\r\nHVALS\r\n$6\r\nmyhash\r\n";
     
   test_command_serialization
     "hlen command"
-    (fun () -> Array (Some [BulkString (Some "HLEN"); BulkString (Some "myhash")]))
+    (fun () -> hlen "myhash")
     "*2\r\n$4\r\nHLEN\r\n$6\r\nmyhash\r\n";
     
   test_command_serialization
     "hdel command"
-    (fun () -> Array (Some [BulkString (Some "HDEL"); BulkString (Some "myhash"); 
-                           BulkString (Some "field1"); BulkString (Some "field2")]))
+    (fun () -> hdel "myhash" ["field1"; "field2"])
     "*4\r\n$4\r\nHDEL\r\n$6\r\nmyhash\r\n$6\r\nfield1\r\n$6\r\nfield2\r\n";
     
   test_command_serialization
     "hexists command"
-    (fun () -> Array (Some [BulkString (Some "HEXISTS"); BulkString (Some "myhash"); BulkString (Some "field")]))
+    (fun () -> hexists "myhash" "field")
     "*3\r\n$7\r\nHEXISTS\r\n$6\r\nmyhash\r\n$5\r\nfield\r\n";
+
+  (* Additional hash commands *)
+  test_command_serialization
+    "hmset command"
+    (fun () -> hmset "myhash" [("field1", "value1"); ("field2", "value2")])
+    "*6\r\n$5\r\nHMSET\r\n$6\r\nmyhash\r\n$6\r\nfield1\r\n$6\r\nvalue1\r\n$6\r\nfield2\r\n$6\r\nvalue2\r\n";
+
+  test_command_serialization
+    "hincrby command"
+    (fun () -> hincrby "myhash" "counter" 10)
+    "*4\r\n$7\r\nHINCRBY\r\n$6\r\nmyhash\r\n$7\r\ncounter\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "hincrbyfloat command"
+    (fun () -> hincrbyfloat "myhash" "score" 2.5)
+    "*4\r\n$12\r\nHINCRBYFLOAT\r\n$6\r\nmyhash\r\n$5\r\nscore\r\n$3\r\n2.5\r\n";
+
+  test_command_serialization
+    "hscan command basic"
+    (fun () -> hscan "myhash" 0 ())
+    "*3\r\n$5\r\nHSCAN\r\n$6\r\nmyhash\r\n$1\r\n0\r\n";
+
+  test_command_serialization
+    "hscan command with match"
+    (fun () -> hscan "myhash" 0 ~pattern:"field*" ())
+    "*5\r\n$5\r\nHSCAN\r\n$6\r\nmyhash\r\n$1\r\n0\r\n$5\r\nMATCH\r\n$6\r\nfield*\r\n";
+
+  test_command_serialization
+    "hscan command with count"
+    (fun () -> hscan "myhash" 0 ~count:5 ())
+    "*5\r\n$5\r\nHSCAN\r\n$6\r\nmyhash\r\n$1\r\n0\r\n$5\r\nCOUNT\r\n$1\r\n5\r\n";
+
+  test_command_serialization
+    "hscan command with match and count"
+    (fun () -> hscan "myhash" 0 ~pattern:"field*" ~count:10 ())
+    "*7\r\n$5\r\nHSCAN\r\n$6\r\nmyhash\r\n$1\r\n0\r\n$5\r\nMATCH\r\n$6\r\nfield*\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "hstrlen command"
+    (fun () -> hstrlen "myhash" "field")
+    "*3\r\n$7\r\nHSTRLEN\r\n$6\r\nmyhash\r\n$5\r\nfield\r\n";
+
+  test_command_serialization
+    "hsetnx command"
+    (fun () -> hsetnx "myhash" "newfield" "newvalue")
+    "*4\r\n$6\r\nHSETNX\r\n$6\r\nmyhash\r\n$8\r\nnewfield\r\n$8\r\nnewvalue\r\n";
+
+  (* Test round-trip serialization for hash commands *)
+  test_command_roundtrip
+    "hmget roundtrip"
+    (fun () -> hmget "myhash" ["field1"; "field2"; "field3"])
+    (hmget "myhash" ["field1"; "field2"; "field3"]);
+
+  test_command_roundtrip
+    "hgetall roundtrip"
+    (fun () -> hgetall "myhash")
+    (hgetall "myhash");
+
+  test_command_roundtrip
+    "hkeys roundtrip"
+    (fun () -> hkeys "myhash")
+    (hkeys "myhash");
+
+  test_command_roundtrip
+    "hvals roundtrip"
+    (fun () -> hvals "myhash")
+    (hvals "myhash");
+
+  test_command_roundtrip
+    "hlen roundtrip"
+    (fun () -> hlen "myhash")
+    (hlen "myhash");
+
+  test_command_roundtrip
+    "hdel roundtrip"
+    (fun () -> hdel "myhash" ["field1"; "field2"])
+    (hdel "myhash" ["field1"; "field2"]);
+
+  test_command_roundtrip
+    "hexists roundtrip"
+    (fun () -> hexists "myhash" "field")
+    (hexists "myhash" "field");
+
+  test_command_roundtrip
+    "hmset roundtrip"
+    (fun () -> hmset "myhash" [("field1", "value1"); ("field2", "value2")])
+    (hmset "myhash" [("field1", "value1"); ("field2", "value2")]);
+
+  test_command_roundtrip
+    "hincrby roundtrip"
+    (fun () -> hincrby "myhash" "counter" 5)
+    (hincrby "myhash" "counter" 5);
+
+  test_command_roundtrip
+    "hincrbyfloat roundtrip"
+    (fun () -> hincrbyfloat "myhash" "score" 1.5)
+    (hincrbyfloat "myhash" "score" 1.5);
+
+  test_command_roundtrip
+    "hscan with options roundtrip"
+    (fun () -> hscan "myhash" 42 ~pattern:"field*" ~count:20 ())
+    (hscan "myhash" 42 ~pattern:"field*" ~count:20 ());
+
+  test_command_roundtrip
+    "hstrlen roundtrip"
+    (fun () -> hstrlen "myhash" "longfield")
+    (hstrlen "myhash" "longfield");
+
+  test_command_roundtrip
+    "hsetnx roundtrip"
+    (fun () -> hsetnx "myhash" "conditionalfield" "conditionalvalue")
+    (hsetnx "myhash" "conditionalfield" "conditionalvalue");
 ]
 
 (* List Commands *)

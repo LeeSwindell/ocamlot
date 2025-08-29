@@ -235,9 +235,12 @@ let hmget key fields =
   Array (Some (BulkString (Some "HMGET") :: BulkString (Some key) :: field_args))
 
 (** HMSET key field value [field value ...] - Set multiple hash fields *)
-let hmset _key _field_values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hmset key field_values =
+  let field_value_args = List.fold_right (fun (field, value) acc ->
+      BulkString (Some field) :: BulkString (Some value) :: acc
+    ) field_values [] in
+  let cmd = BulkString (Some "HMSET") :: BulkString (Some key) :: field_value_args in
+  Array (Some cmd)
 
 (** HGETALL key - Get all hash fields and values *)
 let hgetall key =
@@ -265,29 +268,34 @@ let hexists key field =
   Array (Some [BulkString (Some "HEXISTS"); BulkString (Some key); BulkString (Some field)])
 
 (** HINCRBY key field increment - Increment hash field by integer *)
-let hincrby _key _field _increment =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hincrby key field increment =
+  Array (Some [BulkString (Some "HINCRBY"); BulkString (Some key); 
+               BulkString (Some field); BulkString (Some (string_of_int increment))])
 
 (** HINCRBYFLOAT key field increment - Increment hash field by float *)
-let hincrbyfloat _key _field _increment =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hincrbyfloat key field increment =
+  Array (Some [BulkString (Some "HINCRBYFLOAT"); BulkString (Some key); 
+               BulkString (Some field); BulkString (Some (string_of_float increment))])
 
 (** HSCAN key cursor [MATCH pattern] [COUNT count] - Scan hash fields *)
-let hscan _key _cursor ?pattern:_pattern ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hscan key cursor ?pattern ?count () =
+  let base_cmd = [BulkString (Some "HSCAN"); BulkString (Some key); BulkString (Some (string_of_int cursor))] in
+  let cmd_with_match = match pattern with
+    | None -> base_cmd
+    | Some p -> base_cmd @ [BulkString (Some "MATCH"); BulkString (Some p)] in
+  let final_cmd = match count with
+    | None -> cmd_with_match
+    | Some c -> cmd_with_match @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))] in
+  Array (Some final_cmd)
 
 (** HSTRLEN key field - Get hash field value length *)
-let hstrlen _key _field =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hstrlen key field =
+  Array (Some [BulkString (Some "HSTRLEN"); BulkString (Some key); BulkString (Some field)])
 
 (** HSETNX key field value - Set hash field if not exists *)
-let hsetnx _key _field _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hsetnx key field value =
+  Array (Some [BulkString (Some "HSETNX"); BulkString (Some key); 
+               BulkString (Some field); BulkString (Some value)])
 
 (* =============================================================================
    LIST COMMANDS
