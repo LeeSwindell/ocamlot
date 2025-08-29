@@ -498,9 +498,9 @@ let zcard key =
   Array (Some [BulkString (Some "ZCARD"); BulkString (Some key)])
 
 (** ZCOUNT key min max - Count members in score range *)
-let zcount _key _min_score _max_score =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zcount key min_score max_score =
+  Array (Some [BulkString (Some "ZCOUNT"); BulkString (Some key); 
+               BulkString (Some (format_numeric_arg min_score)); BulkString (Some (format_numeric_arg max_score))])
 
 (** ZSCORE key member - Get member score *)
 let zscore key member =
@@ -511,9 +511,8 @@ let zrank key member =
   Array (Some [BulkString (Some "ZRANK"); BulkString (Some key); BulkString (Some member)])
 
 (** ZREVRANK key member - Get member rank (descending) *)
-let zrevrank _key _member =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrevrank key member =
+  Array (Some [BulkString (Some "ZREVRANK"); BulkString (Some key); BulkString (Some member)])
 
 (** ZRANGE key start stop [WITHSCORES] - Get range by rank *)
 let zrange key start_idx stop_idx ?withscores () =
@@ -525,49 +524,99 @@ let zrange key start_idx stop_idx ?withscores () =
   Array (Some cmd)
 
 (** ZREVRANGE key start stop [WITHSCORES] - Get range by rank (descending) *)
-let zrevrange _key _start_idx _stop_idx ?withscores:_withscores () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrevrange key start_idx stop_idx ?withscores () =
+  let base_cmd = [BulkString (Some "ZREVRANGE"); BulkString (Some key); 
+                  BulkString (Some (string_of_int start_idx)); BulkString (Some (string_of_int stop_idx))] in
+  let cmd = match withscores with
+    | Some true -> base_cmd @ [BulkString (Some "WITHSCORES")]
+    | _ -> base_cmd in
+  Array (Some cmd)
 
 (** ZRANGEBYSCORE key min max [WITHSCORES] [LIMIT offset count] - Get range by score *)
-let zrangebyscore _key _min_score _max_score ?withscores:_withscores ?limit:_limit () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrangebyscore key min_score max_score ?withscores ?limit () =
+  let base_cmd = [BulkString (Some "ZRANGEBYSCORE"); BulkString (Some key); 
+                  BulkString (Some (format_numeric_arg min_score)); BulkString (Some (format_numeric_arg max_score))] in
+  let cmd_with_scores = match withscores with
+    | Some true -> base_cmd @ [BulkString (Some "WITHSCORES")]
+    | _ -> base_cmd in
+  let final_cmd = match limit with
+    | None -> cmd_with_scores
+    | Some (offset, count) -> cmd_with_scores @ [BulkString (Some "LIMIT"); 
+                                                BulkString (Some (string_of_int offset)); BulkString (Some (string_of_int count))] in
+  Array (Some final_cmd)
 
 (** ZREVRANGEBYSCORE key max min [WITHSCORES] [LIMIT offset count] - Get range by score (descending) *)
-let zrevrangebyscore _key _max_score _min_score ?withscores:_withscores ?limit:_limit () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrevrangebyscore key max_score min_score ?withscores ?limit () =
+  let base_cmd = [BulkString (Some "ZREVRANGEBYSCORE"); BulkString (Some key); 
+                  BulkString (Some (format_numeric_arg max_score)); BulkString (Some (format_numeric_arg min_score))] in
+  let cmd_with_scores = match withscores with
+    | Some true -> base_cmd @ [BulkString (Some "WITHSCORES")]
+    | _ -> base_cmd in
+  let final_cmd = match limit with
+    | None -> cmd_with_scores
+    | Some (offset, count) -> cmd_with_scores @ [BulkString (Some "LIMIT"); 
+                                                BulkString (Some (string_of_int offset)); BulkString (Some (string_of_int count))] in
+  Array (Some final_cmd)
 
 (** ZREMRANGEBYRANK key start stop - Remove by rank range *)
-let zremrangebyrank _key _start_idx _stop_idx =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zremrangebyrank key start_idx stop_idx =
+  Array (Some [BulkString (Some "ZREMRANGEBYRANK"); BulkString (Some key); 
+               BulkString (Some (string_of_int start_idx)); BulkString (Some (string_of_int stop_idx))])
 
 (** ZREMRANGEBYSCORE key min max - Remove by score range *)
-let zremrangebyscore _key _min_score _max_score =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zremrangebyscore key min_score max_score =
+  Array (Some [BulkString (Some "ZREMRANGEBYSCORE"); BulkString (Some key); 
+               BulkString (Some (format_numeric_arg min_score)); BulkString (Some (format_numeric_arg max_score))])
 
 (** ZINCRBY key increment member - Increment member score *)
-let zincrby _key _increment _member =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zincrby key increment member =
+  Array (Some [BulkString (Some "ZINCRBY"); BulkString (Some key); 
+               BulkString (Some (format_numeric_arg increment)); BulkString (Some member)])
 
 (** ZINTERSTORE destination numkeys key [key ...] - Store sorted set intersection *)
-let zinterstore _destination _keys ?weights:_weights ?aggregate:_aggregate () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zinterstore destination keys ?weights ?aggregate () =
+  let numkeys = List.length keys in
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  let base_cmd = BulkString (Some "ZINTERSTORE") :: BulkString (Some destination) :: 
+                 BulkString (Some (string_of_int numkeys)) :: key_args in
+  let cmd_with_weights = match weights with
+    | None -> base_cmd
+    | Some w -> base_cmd @ [BulkString (Some "WEIGHTS")] @ List.map (fun weight -> BulkString (Some (format_numeric_arg weight))) w in
+  let final_cmd = match aggregate with
+    | None -> cmd_with_weights
+    | Some agg -> 
+        let agg_str = match agg with
+          | `SUM -> "SUM" | `MIN -> "MIN" | `MAX -> "MAX" in
+        cmd_with_weights @ [BulkString (Some "AGGREGATE"); BulkString (Some agg_str)] in
+  Array (Some final_cmd)
 
 (** ZUNIONSTORE destination numkeys key [key ...] - Store sorted set union *)
-let zunionstore _destination _keys ?weights:_weights ?aggregate:_aggregate () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zunionstore destination keys ?weights ?aggregate () =
+  let numkeys = List.length keys in
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  let base_cmd = BulkString (Some "ZUNIONSTORE") :: BulkString (Some destination) :: 
+                 BulkString (Some (string_of_int numkeys)) :: key_args in
+  let cmd_with_weights = match weights with
+    | None -> base_cmd
+    | Some w -> base_cmd @ [BulkString (Some "WEIGHTS")] @ List.map (fun weight -> BulkString (Some (format_numeric_arg weight))) w in
+  let final_cmd = match aggregate with
+    | None -> cmd_with_weights
+    | Some agg -> 
+        let agg_str = match agg with
+          | `SUM -> "SUM" | `MIN -> "MIN" | `MAX -> "MAX" in
+        cmd_with_weights @ [BulkString (Some "AGGREGATE"); BulkString (Some agg_str)] in
+  Array (Some final_cmd)
 
 (** ZSCAN key cursor [MATCH pattern] [COUNT count] - Scan sorted set members *)
-let zscan _key _cursor ?pattern:_pattern ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zscan key cursor ?pattern ?count () =
+  let base_cmd = [BulkString (Some "ZSCAN"); BulkString (Some key); BulkString (Some (string_of_int cursor))] in
+  let cmd_with_match = match pattern with
+    | None -> base_cmd
+    | Some p -> base_cmd @ [BulkString (Some "MATCH"); BulkString (Some p)] in
+  let final_cmd = match count with
+    | None -> cmd_with_match
+    | Some c -> cmd_with_match @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))] in
+  Array (Some final_cmd)
 
 (* =============================================================================
    BITMAP COMMANDS

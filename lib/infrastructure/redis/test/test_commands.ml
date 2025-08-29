@@ -1325,42 +1325,230 @@ let redis_set_command_tests = [
 let sorted_set_command_tests = [
   test_command_serialization
     "zadd single score-member"
-    (fun () -> Array (Some [BulkString (Some "ZADD"); BulkString (Some "myzset"); 
-                           BulkString (Some "100"); BulkString (Some "member")]))
+    (fun () -> zadd "myzset" [(100.0, "member")])
     "*4\r\n$4\r\nZADD\r\n$6\r\nmyzset\r\n$3\r\n100\r\n$6\r\nmember\r\n";
     
   test_command_serialization
     "zadd multiple score-members"
-    (fun () -> Array (Some [BulkString (Some "ZADD"); BulkString (Some "myzset"); 
-                           BulkString (Some "100"); BulkString (Some "member1");
-                           BulkString (Some "200"); BulkString (Some "member2")]))
+    (fun () -> zadd "myzset" [(100.0, "member1"); (200.0, "member2")])
     "*6\r\n$4\r\nZADD\r\n$6\r\nmyzset\r\n$3\r\n100\r\n$7\r\nmember1\r\n$3\r\n200\r\n$7\r\nmember2\r\n";
     
   test_command_serialization
     "zrem command"
-    (fun () -> Array (Some [BulkString (Some "ZREM"); BulkString (Some "myzset"); BulkString (Some "member")]))
+    (fun () -> zrem "myzset" ["member"])
     "*3\r\n$4\r\nZREM\r\n$6\r\nmyzset\r\n$6\r\nmember\r\n";
     
   test_command_serialization
     "zcard command"
-    (fun () -> Array (Some [BulkString (Some "ZCARD"); BulkString (Some "myzset")]))
+    (fun () -> zcard "myzset")
     "*2\r\n$5\r\nZCARD\r\n$6\r\nmyzset\r\n";
     
   test_command_serialization
     "zscore command"
-    (fun () -> Array (Some [BulkString (Some "ZSCORE"); BulkString (Some "myzset"); BulkString (Some "member")]))
+    (fun () -> zscore "myzset" "member")
     "*3\r\n$6\r\nZSCORE\r\n$6\r\nmyzset\r\n$6\r\nmember\r\n";
     
   test_command_serialization
     "zrange command"
-    (fun () -> Array (Some [BulkString (Some "ZRANGE"); BulkString (Some "myzset"); 
-                           BulkString (Some "0"); BulkString (Some "-1")]))
+    (fun () -> zrange "myzset" 0 (-1) ())
     "*4\r\n$6\r\nZRANGE\r\n$6\r\nmyzset\r\n$1\r\n0\r\n$2\r\n-1\r\n";
     
   test_command_serialization
     "zrank command"
-    (fun () -> Array (Some [BulkString (Some "ZRANK"); BulkString (Some "myzset"); BulkString (Some "member")]))
+    (fun () -> zrank "myzset" "member")
     "*3\r\n$5\r\nZRANK\r\n$6\r\nmyzset\r\n$6\r\nmember\r\n";
+
+  (* Additional sorted set commands *)
+  test_command_serialization
+    "zcount command"
+    (fun () -> zcount "myzset" 10.0 100.0)
+    "*4\r\n$6\r\nZCOUNT\r\n$6\r\nmyzset\r\n$2\r\n10\r\n$3\r\n100\r\n";
+
+  test_command_serialization
+    "zrevrank command"
+    (fun () -> zrevrank "myzset" "member")
+    "*3\r\n$8\r\nZREVRANK\r\n$6\r\nmyzset\r\n$6\r\nmember\r\n";
+
+  test_command_serialization
+    "zrevrange command"
+    (fun () -> zrevrange "myzset" 0 (-1) ())
+    "*4\r\n$9\r\nZREVRANGE\r\n$6\r\nmyzset\r\n$1\r\n0\r\n$2\r\n-1\r\n";
+
+  test_command_serialization
+    "zrevrange with withscores"
+    (fun () -> zrevrange "myzset" 0 5 ~withscores:true ())
+    "*5\r\n$9\r\nZREVRANGE\r\n$6\r\nmyzset\r\n$1\r\n0\r\n$1\r\n5\r\n$10\r\nWITHSCORES\r\n";
+
+  test_command_serialization
+    "zrangebyscore basic"
+    (fun () -> zrangebyscore "myzset" 10.0 100.0 ())
+    "*4\r\n$13\r\nZRANGEBYSCORE\r\n$6\r\nmyzset\r\n$2\r\n10\r\n$3\r\n100\r\n";
+
+  test_command_serialization
+    "zrangebyscore with withscores"
+    (fun () -> zrangebyscore "myzset" 10.0 100.0 ~withscores:true ())
+    "*5\r\n$13\r\nZRANGEBYSCORE\r\n$6\r\nmyzset\r\n$2\r\n10\r\n$3\r\n100\r\n$10\r\nWITHSCORES\r\n";
+
+  test_command_serialization
+    "zrangebyscore with limit"
+    (fun () -> zrangebyscore "myzset" 10.0 100.0 ~limit:(5, 10) ())
+    "*7\r\n$13\r\nZRANGEBYSCORE\r\n$6\r\nmyzset\r\n$2\r\n10\r\n$3\r\n100\r\n$5\r\nLIMIT\r\n$1\r\n5\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "zrevrangebyscore basic"
+    (fun () -> zrevrangebyscore "myzset" 100.0 10.0 ())
+    "*4\r\n$16\r\nZREVRANGEBYSCORE\r\n$6\r\nmyzset\r\n$3\r\n100\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "zrevrangebyscore with withscores and limit"
+    (fun () -> zrevrangebyscore "myzset" 100.0 10.0 ~withscores:true ~limit:(0, 5) ())
+    "*8\r\n$16\r\nZREVRANGEBYSCORE\r\n$6\r\nmyzset\r\n$3\r\n100\r\n$2\r\n10\r\n$10\r\nWITHSCORES\r\n$5\r\nLIMIT\r\n$1\r\n0\r\n$1\r\n5\r\n";
+
+  test_command_serialization
+    "zremrangebyrank command"
+    (fun () -> zremrangebyrank "myzset" 0 10)
+    "*4\r\n$15\r\nZREMRANGEBYRANK\r\n$6\r\nmyzset\r\n$1\r\n0\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "zremrangebyscore command"
+    (fun () -> zremrangebyscore "myzset" 10.0 100.0)
+    "*4\r\n$16\r\nZREMRANGEBYSCORE\r\n$6\r\nmyzset\r\n$2\r\n10\r\n$3\r\n100\r\n";
+
+  test_command_serialization
+    "zincrby command"
+    (fun () -> zincrby "myzset" 10.5 "member")
+    "*4\r\n$7\r\nZINCRBY\r\n$6\r\nmyzset\r\n$4\r\n10.5\r\n$6\r\nmember\r\n";
+
+  test_command_serialization
+    "zinterstore basic"
+    (fun () -> zinterstore "result" ["set1"; "set2"] ())
+    "*5\r\n$11\r\nZINTERSTORE\r\n$6\r\nresult\r\n$1\r\n2\r\n$4\r\nset1\r\n$4\r\nset2\r\n";
+
+  test_command_serialization
+    "zinterstore with weights"
+    (fun () -> zinterstore "result" ["set1"; "set2"] ~weights:[2.0; 0.5] ())
+    "*8\r\n$11\r\nZINTERSTORE\r\n$6\r\nresult\r\n$1\r\n2\r\n$4\r\nset1\r\n$4\r\nset2\r\n$7\r\nWEIGHTS\r\n$1\r\n2\r\n$3\r\n0.5\r\n";
+
+  test_command_serialization
+    "zinterstore with aggregate"
+    (fun () -> zinterstore "result" ["set1"; "set2"] ~aggregate:`MAX ())
+    "*7\r\n$11\r\nZINTERSTORE\r\n$6\r\nresult\r\n$1\r\n2\r\n$4\r\nset1\r\n$4\r\nset2\r\n$9\r\nAGGREGATE\r\n$3\r\nMAX\r\n";
+
+  test_command_serialization
+    "zunionstore basic"
+    (fun () -> zunionstore "result" ["set1"; "set2"; "set3"] ())
+    "*6\r\n$11\r\nZUNIONSTORE\r\n$6\r\nresult\r\n$1\r\n3\r\n$4\r\nset1\r\n$4\r\nset2\r\n$4\r\nset3\r\n";
+
+  test_command_serialization
+    "zunionstore with weights and aggregate"
+    (fun () -> zunionstore "result" ["set1"; "set2"] ~weights:[1.0; 2.0] ~aggregate:`MIN ())
+    "*10\r\n$11\r\nZUNIONSTORE\r\n$6\r\nresult\r\n$1\r\n2\r\n$4\r\nset1\r\n$4\r\nset2\r\n$7\r\nWEIGHTS\r\n$1\r\n1\r\n$1\r\n2\r\n$9\r\nAGGREGATE\r\n$3\r\nMIN\r\n";
+
+  test_command_serialization
+    "zscan basic"
+    (fun () -> zscan "myzset" 0 ())
+    "*3\r\n$5\r\nZSCAN\r\n$6\r\nmyzset\r\n$1\r\n0\r\n";
+
+  test_command_serialization
+    "zscan with match"
+    (fun () -> zscan "myzset" 0 ~pattern:"member:*" ())
+    "*5\r\n$5\r\nZSCAN\r\n$6\r\nmyzset\r\n$1\r\n0\r\n$5\r\nMATCH\r\n$8\r\nmember:*\r\n";
+
+  test_command_serialization
+    "zscan with count"
+    (fun () -> zscan "myzset" 42 ~count:20 ())
+    "*5\r\n$5\r\nZSCAN\r\n$6\r\nmyzset\r\n$2\r\n42\r\n$5\r\nCOUNT\r\n$2\r\n20\r\n";
+
+  test_command_serialization
+    "zscan with match and count"
+    (fun () -> zscan "myzset" 100 ~pattern:"user:*" ~count:50 ())
+    "*7\r\n$5\r\nZSCAN\r\n$6\r\nmyzset\r\n$3\r\n100\r\n$5\r\nMATCH\r\n$6\r\nuser:*\r\n$5\r\nCOUNT\r\n$2\r\n50\r\n";
+
+  (* Test round-trip serialization for sorted set commands *)
+  test_command_roundtrip
+    "zadd roundtrip"
+    (fun () -> zadd "myzset" [(100.5, "member1"); (200.0, "member2")])
+    (zadd "myzset" [(100.5, "member1"); (200.0, "member2")]);
+
+  test_command_roundtrip
+    "zrem roundtrip"
+    (fun () -> zrem "myzset" ["member1"; "member2"])
+    (zrem "myzset" ["member1"; "member2"]);
+
+  test_command_roundtrip
+    "zcard roundtrip"
+    (fun () -> zcard "myzset")
+    (zcard "myzset");
+
+  test_command_roundtrip
+    "zcount roundtrip"
+    (fun () -> zcount "myzset" 50.0 150.0)
+    (zcount "myzset" 50.0 150.0);
+
+  test_command_roundtrip
+    "zscore roundtrip"
+    (fun () -> zscore "myzset" "member")
+    (zscore "myzset" "member");
+
+  test_command_roundtrip
+    "zrank roundtrip"
+    (fun () -> zrank "myzset" "member")
+    (zrank "myzset" "member");
+
+  test_command_roundtrip
+    "zrevrank roundtrip"
+    (fun () -> zrevrank "myzset" "member")
+    (zrevrank "myzset" "member");
+
+  test_command_roundtrip
+    "zrange with withscores roundtrip"
+    (fun () -> zrange "myzset" 0 10 ~withscores:true ())
+    (zrange "myzset" 0 10 ~withscores:true ());
+
+  test_command_roundtrip
+    "zrevrange roundtrip"
+    (fun () -> zrevrange "myzset" 0 (-1) ())
+    (zrevrange "myzset" 0 (-1) ());
+
+  test_command_roundtrip
+    "zrangebyscore with options roundtrip"
+    (fun () -> zrangebyscore "myzset" 10.0 100.0 ~withscores:true ~limit:(5, 15) ())
+    (zrangebyscore "myzset" 10.0 100.0 ~withscores:true ~limit:(5, 15) ());
+
+  test_command_roundtrip
+    "zrevrangebyscore roundtrip"
+    (fun () -> zrevrangebyscore "myzset" 100.0 10.0 ())
+    (zrevrangebyscore "myzset" 100.0 10.0 ());
+
+  test_command_roundtrip
+    "zremrangebyrank roundtrip"
+    (fun () -> zremrangebyrank "myzset" 5 15)
+    (zremrangebyrank "myzset" 5 15);
+
+  test_command_roundtrip
+    "zremrangebyscore roundtrip"
+    (fun () -> zremrangebyscore "myzset" 50.0 150.0)
+    (zremrangebyscore "myzset" 50.0 150.0);
+
+  test_command_roundtrip
+    "zincrby roundtrip"
+    (fun () -> zincrby "myzset" 25.5 "member")
+    (zincrby "myzset" 25.5 "member");
+
+  test_command_roundtrip
+    "zinterstore with all options roundtrip"
+    (fun () -> zinterstore "result" ["set1"; "set2"] ~weights:[1.5; 2.0] ~aggregate:`SUM ())
+    (zinterstore "result" ["set1"; "set2"] ~weights:[1.5; 2.0] ~aggregate:`SUM ());
+
+  test_command_roundtrip
+    "zunionstore roundtrip"
+    (fun () -> zunionstore "union_result" ["zset1"; "zset2"; "zset3"] ())
+    (zunionstore "union_result" ["zset1"; "zset2"; "zset3"] ());
+
+  test_command_roundtrip
+    "zscan with options roundtrip"
+    (fun () -> zscan "large_zset" 200 ~pattern:"item:*" ~count:100 ())
+    (zscan "large_zset" 200 ~pattern:"item:*" ~count:100 ());
 ]
 
 (* Pub/Sub Commands *)
