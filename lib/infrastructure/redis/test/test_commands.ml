@@ -1551,6 +1551,146 @@ let sorted_set_command_tests = [
     (zscan "large_zset" 200 ~pattern:"item:*" ~count:100 ());
 ]
 
+(* Bitmap Commands *)
+let bitmap_command_tests = [
+  (* SETBIT command tests *)
+  test_command_serialization
+    "setbit set bit to 1"
+    (fun () -> setbit "mykey" 7 true)
+    "*4\r\n$6\r\nSETBIT\r\n$5\r\nmykey\r\n$1\r\n7\r\n$1\r\n1\r\n";
+  
+  test_command_serialization
+    "setbit set bit to 0"
+    (fun () -> setbit "mykey" 100 false)
+    "*4\r\n$6\r\nSETBIT\r\n$5\r\nmykey\r\n$3\r\n100\r\n$1\r\n0\r\n";
+  
+  test_command_serialization
+    "setbit large offset"
+    (fun () -> setbit "bitmap" 999999 true)
+    "*4\r\n$6\r\nSETBIT\r\n$6\r\nbitmap\r\n$6\r\n999999\r\n$1\r\n1\r\n";
+
+  (* GETBIT command tests *)
+  test_command_serialization
+    "getbit command"
+    (fun () -> getbit "mykey" 7)
+    "*3\r\n$6\r\nGETBIT\r\n$5\r\nmykey\r\n$1\r\n7\r\n";
+    
+  test_command_serialization
+    "getbit large offset"
+    (fun () -> getbit "bitmap" 100000)
+    "*3\r\n$6\r\nGETBIT\r\n$6\r\nbitmap\r\n$6\r\n100000\r\n";
+
+  (* BITCOUNT command tests *)
+  test_command_serialization
+    "bitcount full key"
+    (fun () -> bitcount "mykey" ())
+    "*2\r\n$8\r\nBITCOUNT\r\n$5\r\nmykey\r\n";
+    
+  test_command_serialization
+    "bitcount with start"
+    (fun () -> bitcount "mykey" ~start:1 ())
+    "*3\r\n$8\r\nBITCOUNT\r\n$5\r\nmykey\r\n$1\r\n1\r\n";
+    
+  test_command_serialization
+    "bitcount with start and end"
+    (fun () -> bitcount "mykey" ~start:1 ~end_pos:100 ())
+    "*4\r\n$8\r\nBITCOUNT\r\n$5\r\nmykey\r\n$1\r\n1\r\n$3\r\n100\r\n";
+
+  (* BITOP command tests *)
+  test_command_serialization
+    "bitop AND operation"
+    (fun () -> bitop `AND "result" ["key1"; "key2"])
+    "*5\r\n$5\r\nBITOP\r\n$3\r\nAND\r\n$6\r\nresult\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n";
+    
+  test_command_serialization
+    "bitop OR operation"
+    (fun () -> bitop `OR "dest" ["source1"; "source2"; "source3"])
+    "*6\r\n$5\r\nBITOP\r\n$2\r\nOR\r\n$4\r\ndest\r\n$7\r\nsource1\r\n$7\r\nsource2\r\n$7\r\nsource3\r\n";
+    
+  test_command_serialization
+    "bitop XOR operation"
+    (fun () -> bitop `XOR "result" ["a"; "b"])
+    "*5\r\n$5\r\nBITOP\r\n$3\r\nXOR\r\n$6\r\nresult\r\n$1\r\na\r\n$1\r\nb\r\n";
+    
+  test_command_serialization
+    "bitop NOT operation"
+    (fun () -> bitop `NOT "inverted" ["original"])
+    "*4\r\n$5\r\nBITOP\r\n$3\r\nNOT\r\n$8\r\ninverted\r\n$8\r\noriginal\r\n";
+
+  (* BITPOS command tests *)
+  test_command_serialization
+    "bitpos find 1 bit"
+    (fun () -> bitpos "mykey" true ())
+    "*3\r\n$6\r\nBITPOS\r\n$5\r\nmykey\r\n$1\r\n1\r\n";
+    
+  test_command_serialization
+    "bitpos find 0 bit"
+    (fun () -> bitpos "mykey" false ())
+    "*3\r\n$6\r\nBITPOS\r\n$5\r\nmykey\r\n$1\r\n0\r\n";
+    
+  test_command_serialization
+    "bitpos with start"
+    (fun () -> bitpos "mykey" true ~start:10 ())
+    "*4\r\n$6\r\nBITPOS\r\n$5\r\nmykey\r\n$1\r\n1\r\n$2\r\n10\r\n";
+    
+  test_command_serialization
+    "bitpos with start and end"
+    (fun () -> bitpos "mykey" false ~start:0 ~end_pos:50 ())
+    "*5\r\n$6\r\nBITPOS\r\n$5\r\nmykey\r\n$1\r\n0\r\n$1\r\n0\r\n$2\r\n50\r\n";
+
+  (* BITFIELD command tests *)
+  test_command_serialization
+    "bitfield single GET"
+    (fun () -> bitfield "mykey" [Get ("i8", 0)])
+    "*5\r\n$8\r\nBITFIELD\r\n$5\r\nmykey\r\n$3\r\nGET\r\n$2\r\ni8\r\n$1\r\n0\r\n";
+    
+  test_command_serialization
+    "bitfield single SET"
+    (fun () -> bitfield "mykey" [Set ("u4", 4, 15)])
+    "*6\r\n$8\r\nBITFIELD\r\n$5\r\nmykey\r\n$3\r\nSET\r\n$2\r\nu4\r\n$1\r\n4\r\n$2\r\n15\r\n";
+    
+  test_command_serialization
+    "bitfield single INCRBY"
+    (fun () -> bitfield "mykey" [Incrby ("i16", 8, 100)])
+    "*6\r\n$8\r\nBITFIELD\r\n$5\r\nmykey\r\n$6\r\nINCRBY\r\n$3\r\ni16\r\n$1\r\n8\r\n$3\r\n100\r\n";
+    
+  test_command_serialization
+    "bitfield multiple operations"
+    (fun () -> bitfield "mykey" [Get ("i8", 0); Set ("u4", 4, 15); Incrby ("i16", 8, 1)])
+    "*13\r\n$8\r\nBITFIELD\r\n$5\r\nmykey\r\n$3\r\nGET\r\n$2\r\ni8\r\n$1\r\n0\r\n$3\r\nSET\r\n$2\r\nu4\r\n$1\r\n4\r\n$2\r\n15\r\n$6\r\nINCRBY\r\n$3\r\ni16\r\n$1\r\n8\r\n$1\r\n1\r\n";
+
+  (* Round-trip serialization tests *)
+  test_command_roundtrip
+    "setbit roundtrip"
+    (fun () -> setbit "test_key" 42 true)
+    (setbit "test_key" 42 true);
+    
+  test_command_roundtrip
+    "getbit roundtrip"
+    (fun () -> getbit "test_key" 42)
+    (getbit "test_key" 42);
+    
+  test_command_roundtrip
+    "bitcount with range roundtrip"
+    (fun () -> bitcount "test_key" ~start:0 ~end_pos:100 ())
+    (bitcount "test_key" ~start:0 ~end_pos:100 ());
+    
+  test_command_roundtrip
+    "bitop AND roundtrip"
+    (fun () -> bitop `AND "result" ["key1"; "key2"])
+    (bitop `AND "result" ["key1"; "key2"]);
+    
+  test_command_roundtrip
+    "bitpos with range roundtrip"
+    (fun () -> bitpos "test_key" true ~start:0 ~end_pos:100 ())
+    (bitpos "test_key" true ~start:0 ~end_pos:100 ());
+    
+  test_command_roundtrip
+    "bitfield complex operations roundtrip"
+    (fun () -> bitfield "test_key" [Get ("i8", 0); Set ("u4", 4, 15); Incrby ("i16", 8, 1)])
+    (bitfield "test_key" [Get ("i8", 0); Set ("u4", 4, 15); Incrby ("i16", 8, 1)]);
+]
+
 (* Pub/Sub Commands *)
 let pubsub_command_tests = [
   test_command_serialization
@@ -1606,7 +1746,7 @@ let transaction_command_tests = [
 let all_comprehensive_tests = 
   connection_server_tests @ key_management_tests @ string_command_tests @
   hash_command_tests @ list_command_tests @ redis_set_command_tests @ 
-  sorted_set_command_tests @ pubsub_command_tests @ transaction_command_tests
+  sorted_set_command_tests @ bitmap_command_tests @ pubsub_command_tests @ transaction_command_tests
 
 (* Combined canonical tests *)
 let all_canonical_tests = 

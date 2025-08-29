@@ -623,34 +623,105 @@ let zscan key cursor ?pattern ?count () =
    ============================================================================= *)
 
 (** SETBIT key offset value - Set bit *)
-let setbit _key _offset _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let setbit key offset value =
+  let value_str = if value then "1" else "0" in
+  Array (Some [
+    BulkString (Some "SETBIT");
+    BulkString (Some key);
+    BulkString (Some (string_of_int offset));
+    BulkString (Some value_str);
+  ])
 
 (** GETBIT key offset - Get bit *)
-let getbit _key _offset =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let getbit key offset =
+  Array (Some [
+    BulkString (Some "GETBIT");
+    BulkString (Some key);
+    BulkString (Some (string_of_int offset));
+  ])
 
 (** BITCOUNT key [start end] - Count set bits *)
-let bitcount _key ?start:_start ?end_pos:_end_pos () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let bitcount key ?start ?end_pos () =
+  let base_cmd = [
+    BulkString (Some "BITCOUNT");
+    BulkString (Some key);
+  ] in
+  let cmd_with_range = match (start, end_pos) with
+    | (Some s, Some e) -> base_cmd @ [
+        BulkString (Some (string_of_int s));
+        BulkString (Some (string_of_int e));
+      ]
+    | (Some s, None) -> base_cmd @ [BulkString (Some (string_of_int s))]
+    | _ -> base_cmd
+  in
+  Array (Some cmd_with_range)
 
 (** BITOP operation destkey key [key ...] - Bitwise operations *)
-let bitop _operation _destkey _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let bitop operation destkey keys =
+  let operation_str = match operation with
+    | `AND -> "AND"
+    | `OR -> "OR"
+    | `XOR -> "XOR"
+    | `NOT -> "NOT"
+  in
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  let base_cmd = [
+    BulkString (Some "BITOP");
+    BulkString (Some operation_str);
+    BulkString (Some destkey);
+  ] in
+  Array (Some (base_cmd @ key_args))
 
 (** BITPOS key bit [start] [end] - Find first bit *)
-let bitpos _key _bit ?start:_start ?end_pos:_end_pos () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let bitpos key bit ?start ?end_pos () =
+  let bit_str = if bit then "1" else "0" in
+  let base_cmd = [
+    BulkString (Some "BITPOS");
+    BulkString (Some key);
+    BulkString (Some bit_str);
+  ] in
+  let cmd_with_range = match (start, end_pos) with
+    | (Some s, Some e) -> base_cmd @ [
+        BulkString (Some (string_of_int s));
+        BulkString (Some (string_of_int e));
+      ]
+    | (Some s, None) -> base_cmd @ [BulkString (Some (string_of_int s))]
+    | _ -> base_cmd
+  in
+  Array (Some cmd_with_range)
 
 (** BITFIELD key [GET type offset] [SET type offset value] [INCRBY type offset increment] - Bit field operations *)
-let bitfield _key _operations =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+type bitfield_operation = 
+  | Get of string * int  (* type, offset *)
+  | Set of string * int * int  (* type, offset, value *)
+  | Incrby of string * int * int  (* type, offset, increment *)
+
+let bitfield key operations =
+  let operation_to_args = function
+    | Get (typ, offset) -> [
+        BulkString (Some "GET");
+        BulkString (Some typ);
+        BulkString (Some (string_of_int offset));
+      ]
+    | Set (typ, offset, value) -> [
+        BulkString (Some "SET");
+        BulkString (Some typ);
+        BulkString (Some (string_of_int offset));
+        BulkString (Some (string_of_int value));
+      ]
+    | Incrby (typ, offset, increment) -> [
+        BulkString (Some "INCRBY");
+        BulkString (Some typ);
+        BulkString (Some (string_of_int offset));
+        BulkString (Some (string_of_int increment));
+      ]
+  in
+  let operation_args = List.concat_map operation_to_args operations in
+  let base_cmd = [
+    BulkString (Some "BITFIELD");
+    BulkString (Some key);
+  ] in
+  Array (Some (base_cmd @ operation_args))
 
 (* =============================================================================
    HYPERLOGLOG COMMANDS
