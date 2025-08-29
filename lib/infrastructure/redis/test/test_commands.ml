@@ -1691,6 +1691,109 @@ let bitmap_command_tests = [
     (bitfield "test_key" [Get ("i8", 0); Set ("u4", 4, 15); Incrby ("i16", 8, 1)]);
 ]
 
+(* HyperLogLog Commands *)
+let hyperloglog_command_tests = [
+  (* PFADD command tests *)
+  test_command_serialization
+    "pfadd single element"
+    (fun () -> pfadd "hll_key" ["element1"])
+    "*3\r\n$5\r\nPFADD\r\n$7\r\nhll_key\r\n$8\r\nelement1\r\n";
+  
+  test_command_serialization
+    "pfadd multiple elements"
+    (fun () -> pfadd "hll_key" ["elem1"; "elem2"; "elem3"])
+    "*5\r\n$5\r\nPFADD\r\n$7\r\nhll_key\r\n$5\r\nelem1\r\n$5\r\nelem2\r\n$5\r\nelem3\r\n";
+  
+  test_command_serialization
+    "pfadd with empty string element"
+    (fun () -> pfadd "hll_key" [""])
+    "*3\r\n$5\r\nPFADD\r\n$7\r\nhll_key\r\n$0\r\n\r\n";
+    
+  test_command_serialization
+    "pfadd with long element"
+    (fun () -> pfadd "hll_key" ["very_long_element_name_for_testing"])
+    "*3\r\n$5\r\nPFADD\r\n$7\r\nhll_key\r\n$34\r\nvery_long_element_name_for_testing\r\n";
+
+  test_command_serialization
+    "pfadd with special characters"
+    (fun () -> pfadd "hll_key" ["elem:with:colons"; "elem with spaces"; "elem\nwith\nnewlines"])
+    "*5\r\n$5\r\nPFADD\r\n$7\r\nhll_key\r\n$16\r\nelem:with:colons\r\n$16\r\nelem with spaces\r\n$18\r\nelem\nwith\nnewlines\r\n";
+
+  (* PFCOUNT command tests *)
+  test_command_serialization
+    "pfcount single key"
+    (fun () -> pfcount ["hll_key"])
+    "*2\r\n$7\r\nPFCOUNT\r\n$7\r\nhll_key\r\n";
+    
+  test_command_serialization
+    "pfcount multiple keys"
+    (fun () -> pfcount ["hll1"; "hll2"; "hll3"])
+    "*4\r\n$7\r\nPFCOUNT\r\n$4\r\nhll1\r\n$4\r\nhll2\r\n$4\r\nhll3\r\n";
+    
+  test_command_serialization
+    "pfcount with long key names"
+    (fun () -> pfcount ["hyperloglog_key_with_very_long_name"])
+    "*2\r\n$7\r\nPFCOUNT\r\n$35\r\nhyperloglog_key_with_very_long_name\r\n";
+
+  (* PFMERGE command tests *)
+  test_command_serialization
+    "pfmerge single source"
+    (fun () -> pfmerge "dest_hll" ["source_hll"])
+    "*3\r\n$7\r\nPFMERGE\r\n$8\r\ndest_hll\r\n$10\r\nsource_hll\r\n";
+    
+  test_command_serialization
+    "pfmerge multiple sources"
+    (fun () -> pfmerge "destination" ["source1"; "source2"; "source3"])
+    "*5\r\n$7\r\nPFMERGE\r\n$11\r\ndestination\r\n$7\r\nsource1\r\n$7\r\nsource2\r\n$7\r\nsource3\r\n";
+    
+  test_command_serialization
+    "pfmerge with many sources"
+    (fun () -> pfmerge "merged" ["hll_a"; "hll_b"; "hll_c"; "hll_d"; "hll_e"])
+    "*7\r\n$7\r\nPFMERGE\r\n$6\r\nmerged\r\n$5\r\nhll_a\r\n$5\r\nhll_b\r\n$5\r\nhll_c\r\n$5\r\nhll_d\r\n$5\r\nhll_e\r\n";
+
+  (* Edge cases *)
+  test_command_serialization
+    "pfadd with numeric-like elements"
+    (fun () -> pfadd "numbers" ["123"; "456"; "789"])
+    "*5\r\n$5\r\nPFADD\r\n$7\r\nnumbers\r\n$3\r\n123\r\n$3\r\n456\r\n$3\r\n789\r\n";
+    
+  test_command_serialization
+    "pfadd with binary data"
+    (fun () -> pfadd "binary" ["\x00\x01\x02\xFF"])
+    "*3\r\n$5\r\nPFADD\r\n$6\r\nbinary\r\n$4\r\n\x00\x01\x02\xFF\r\n";
+
+  (* Round-trip serialization tests *)
+  test_command_roundtrip
+    "pfadd roundtrip"
+    (fun () -> pfadd "test_hll" ["elem1"; "elem2"])
+    (pfadd "test_hll" ["elem1"; "elem2"]);
+    
+  test_command_roundtrip
+    "pfcount roundtrip"
+    (fun () -> pfcount ["hll1"; "hll2"])
+    (pfcount ["hll1"; "hll2"]);
+    
+  test_command_roundtrip
+    "pfmerge roundtrip"
+    (fun () -> pfmerge "dest" ["src1"; "src2"; "src3"])
+    (pfmerge "dest" ["src1"; "src2"; "src3"]);
+    
+  test_command_roundtrip
+    "pfadd single element roundtrip"
+    (fun () -> pfadd "single_hll" ["single_element"])
+    (pfadd "single_hll" ["single_element"]);
+    
+  test_command_roundtrip
+    "pfcount single key roundtrip"
+    (fun () -> pfcount ["single_key"])
+    (pfcount ["single_key"]);
+    
+  test_command_roundtrip
+    "pfmerge with many sources roundtrip"
+    (fun () -> pfmerge "dest" ["a"; "b"; "c"; "d"; "e"; "f"])
+    (pfmerge "dest" ["a"; "b"; "c"; "d"; "e"; "f"]);
+]
+
 (* Pub/Sub Commands *)
 let pubsub_command_tests = [
   test_command_serialization
@@ -1746,7 +1849,7 @@ let transaction_command_tests = [
 let all_comprehensive_tests = 
   connection_server_tests @ key_management_tests @ string_command_tests @
   hash_command_tests @ list_command_tests @ redis_set_command_tests @ 
-  sorted_set_command_tests @ bitmap_command_tests @ pubsub_command_tests @ transaction_command_tests
+  sorted_set_command_tests @ bitmap_command_tests @ hyperloglog_command_tests @ pubsub_command_tests @ transaction_command_tests
 
 (* Combined canonical tests *)
 let all_canonical_tests = 

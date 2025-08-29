@@ -82,6 +82,7 @@ let () =
     "commands: sets", sync_to_lwt redis_set_command_tests;
     "commands: sorted sets", sync_to_lwt sorted_set_command_tests;
     "commands: bitmaps", sync_to_lwt bitmap_command_tests;
+    "commands: hyperloglogs", sync_to_lwt hyperloglog_command_tests;
     "commands: pub/sub", sync_to_lwt pubsub_command_tests;
     "commands: transactions", sync_to_lwt transaction_command_tests;
     

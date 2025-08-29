@@ -728,19 +728,28 @@ let bitfield key operations =
    ============================================================================= *)
 
 (** PFADD key element [element ...] - Add to HyperLogLog *)
-let pfadd _key _elements =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let pfadd key elements =
+  let element_args = List.map (fun e -> BulkString (Some e)) elements in
+  let base_cmd = [
+    BulkString (Some "PFADD");
+    BulkString (Some key);
+  ] in
+  Array (Some (base_cmd @ element_args))
 
 (** PFCOUNT key [key ...] - Count HyperLogLog cardinality *)
-let pfcount _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let pfcount keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  let base_cmd = [BulkString (Some "PFCOUNT")] in
+  Array (Some (base_cmd @ key_args))
 
 (** PFMERGE destkey sourcekey [sourcekey ...] - Merge HyperLogLogs *)
-let pfmerge _destkey _sourcekeys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let pfmerge destkey sourcekeys =
+  let source_args = List.map (fun k -> BulkString (Some k)) sourcekeys in
+  let base_cmd = [
+    BulkString (Some "PFMERGE");
+    BulkString (Some destkey);
+  ] in
+  Array (Some (base_cmd @ source_args))
 
 (* =============================================================================
    STREAM COMMANDS
