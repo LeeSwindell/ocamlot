@@ -13,6 +13,22 @@ type redis_result = (Resp3.resp_value, string) result Lwt.t
 (* Command execution type - will be provided by client *)
 type 'a command_executor = Resp3.resp_value -> 'a
 
+(** Helper functions for Redis command argument formatting *)
+
+(** Format timeout values for Redis commands - produces clean integers when possible *)
+let format_timeout timeout =
+  if Float.is_integer timeout then
+    string_of_int (int_of_float timeout)
+  else
+    string_of_float timeout
+
+(** Format numeric arguments that should be clean integers when possible *)
+let format_numeric_arg f =
+  if Float.is_integer f then
+    string_of_int (int_of_float f)
+  else
+    string_of_float f
+
 (* =============================================================================
    CONNECTION COMMANDS
    ============================================================================= *)
@@ -184,7 +200,7 @@ let incrby key increment =
 (** INCRBYFLOAT key increment - Increment by float *)
 let incrbyfloat key increment =
   Array (Some [BulkString (Some "INCRBYFLOAT"); BulkString (Some key); 
-               BulkString (Some (string_of_float increment))])
+               BulkString (Some (format_numeric_arg increment))])
 
 (** DECR key - Decrement integer value *)
 let decr key =
@@ -275,7 +291,7 @@ let hincrby key field increment =
 (** HINCRBYFLOAT key field increment - Increment hash field by float *)
 let hincrbyfloat key field increment =
   Array (Some [BulkString (Some "HINCRBYFLOAT"); BulkString (Some key); 
-               BulkString (Some field); BulkString (Some (string_of_float increment))])
+               BulkString (Some field); BulkString (Some (format_numeric_arg increment))])
 
 (** HSCAN key cursor [MATCH pattern] [COUNT count] - Scan hash fields *)
 let hscan key cursor ?pattern ?count () =
@@ -329,48 +345,50 @@ let lrange key start_idx stop_idx =
                BulkString (Some (string_of_int start_idx)); BulkString (Some (string_of_int stop_idx))])
 
 (** LTRIM key start stop - Trim list to range *)
-let ltrim _key _start_idx _stop_idx =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let ltrim key start_idx stop_idx =
+  Array (Some [BulkString (Some "LTRIM"); BulkString (Some key); 
+               BulkString (Some (string_of_int start_idx)); BulkString (Some (string_of_int stop_idx))])
 
 (** LINDEX key index - Get list element by index *)
 let lindex key index =
   Array (Some [BulkString (Some "LINDEX"); BulkString (Some key); BulkString (Some (string_of_int index))])
 
 (** LSET key index value - Set list element by index *)
-let lset _key _index _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let lset key index value =
+  Array (Some [BulkString (Some "LSET"); BulkString (Some key); 
+               BulkString (Some (string_of_int index)); BulkString (Some value)])
 
 (** LREM key count value - Remove list elements *)
-let lrem _key _count _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let lrem key count value =
+  Array (Some [BulkString (Some "LREM"); BulkString (Some key); 
+               BulkString (Some (string_of_int count)); BulkString (Some value)])
 
 (** LINSERT key BEFORE|AFTER pivot value - Insert into list *)
-let linsert _key ~before:_before _pivot _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let linsert key ~before pivot value =
+  let direction = if before then "BEFORE" else "AFTER" in
+  Array (Some [BulkString (Some "LINSERT"); BulkString (Some key); 
+               BulkString (Some direction); BulkString (Some pivot); BulkString (Some value)])
 
 (** BLPOP key [key ...] timeout - Blocking pop from list head *)
-let blpop _keys _timeout =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let blpop keys timeout =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  let timeout_str = format_timeout timeout in
+  Array (Some (BulkString (Some "BLPOP") :: key_args @ [BulkString (Some timeout_str)]))
 
 (** BRPOP key [key ...] timeout - Blocking pop from list tail *)
-let brpop _keys _timeout =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let brpop keys timeout =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  let timeout_str = format_timeout timeout in
+  Array (Some (BulkString (Some "BRPOP") :: key_args @ [BulkString (Some timeout_str)]))
 
 (** BRPOPLPUSH source destination timeout - Blocking pop and push *)
-let brpoplpush _source _destination _timeout =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let brpoplpush source destination timeout =
+  Array (Some [BulkString (Some "BRPOPLPUSH"); BulkString (Some source); 
+               BulkString (Some destination); BulkString (Some (format_timeout timeout))])
 
 (** RPOPLPUSH source destination - Pop and push *)
-let rpoplpush _source _destination =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let rpoplpush source destination =
+  Array (Some [BulkString (Some "RPOPLPUSH"); BulkString (Some source); BulkString (Some destination)])
 
 (* =============================================================================
    SET COMMANDS
@@ -455,7 +473,7 @@ let sscan _key _cursor ?pattern:_pattern ?count:_count () =
 (** ZADD key score member [score member ...] - Add to sorted set *)
 let zadd key ?nx:_nx ?xx:_xx ?ch:_ch ?incr:_incr score_members =
   let score_member_args = List.fold_right (fun (score, member) acc ->
-    BulkString (Some (string_of_float score)) :: BulkString (Some member) :: acc) score_members [] in
+    BulkString (Some (format_numeric_arg score)) :: BulkString (Some member) :: acc) score_members [] in
   Array (Some (BulkString (Some "ZADD") :: BulkString (Some key) :: score_member_args))
 
 (** ZREM key member [member ...] - Remove from sorted set *)

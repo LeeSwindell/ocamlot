@@ -950,45 +950,185 @@ let hash_command_tests = [
 let list_command_tests = [
   test_command_serialization
     "lpush single value"
-    (fun () -> Array (Some [BulkString (Some "LPUSH"); BulkString (Some "mylist"); BulkString (Some "value")]))
+    (fun () -> lpush "mylist" ["value"])
     "*3\r\n$5\r\nLPUSH\r\n$6\r\nmylist\r\n$5\r\nvalue\r\n";
     
   test_command_serialization
     "lpush multiple values"
-    (fun () -> Array (Some [BulkString (Some "LPUSH"); BulkString (Some "mylist"); 
-                           BulkString (Some "val1"); BulkString (Some "val2")]))
+    (fun () -> lpush "mylist" ["val1"; "val2"])
     "*4\r\n$5\r\nLPUSH\r\n$6\r\nmylist\r\n$4\r\nval1\r\n$4\r\nval2\r\n";
     
   test_command_serialization
     "rpush command"
-    (fun () -> Array (Some [BulkString (Some "RPUSH"); BulkString (Some "mylist"); BulkString (Some "value")]))
+    (fun () -> rpush "mylist" ["value"])
     "*3\r\n$5\r\nRPUSH\r\n$6\r\nmylist\r\n$5\r\nvalue\r\n";
     
   test_command_serialization
     "lpop command"
-    (fun () -> Array (Some [BulkString (Some "LPOP"); BulkString (Some "mylist")]))
+    (fun () -> lpop "mylist")
     "*2\r\n$4\r\nLPOP\r\n$6\r\nmylist\r\n";
     
   test_command_serialization
     "rpop command"
-    (fun () -> Array (Some [BulkString (Some "RPOP"); BulkString (Some "mylist")]))
+    (fun () -> rpop "mylist")
     "*2\r\n$4\r\nRPOP\r\n$6\r\nmylist\r\n";
     
   test_command_serialization
     "llen command"
-    (fun () -> Array (Some [BulkString (Some "LLEN"); BulkString (Some "mylist")]))
+    (fun () -> llen "mylist")
     "*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n";
     
   test_command_serialization
     "lrange command"
-    (fun () -> Array (Some [BulkString (Some "LRANGE"); BulkString (Some "mylist"); 
-                           BulkString (Some "0"); BulkString (Some "-1")]))
+    (fun () -> lrange "mylist" 0 (-1))
     "*4\r\n$6\r\nLRANGE\r\n$6\r\nmylist\r\n$1\r\n0\r\n$2\r\n-1\r\n";
     
   test_command_serialization
     "lindex command"
-    (fun () -> Array (Some [BulkString (Some "LINDEX"); BulkString (Some "mylist"); BulkString (Some "0")]))
+    (fun () -> lindex "mylist" 0)
     "*3\r\n$6\r\nLINDEX\r\n$6\r\nmylist\r\n$1\r\n0\r\n";
+
+  (* Additional list commands *)
+  test_command_serialization
+    "ltrim command"
+    (fun () -> ltrim "mylist" 1 5)
+    "*4\r\n$5\r\nLTRIM\r\n$6\r\nmylist\r\n$1\r\n1\r\n$1\r\n5\r\n";
+
+  test_command_serialization
+    "lset command"
+    (fun () -> lset "mylist" 2 "newvalue")
+    "*4\r\n$4\r\nLSET\r\n$6\r\nmylist\r\n$1\r\n2\r\n$8\r\nnewvalue\r\n";
+
+  test_command_serialization
+    "lrem command positive count"
+    (fun () -> lrem "mylist" 2 "value")
+    "*4\r\n$4\r\nLREM\r\n$6\r\nmylist\r\n$1\r\n2\r\n$5\r\nvalue\r\n";
+
+  test_command_serialization
+    "lrem command negative count"
+    (fun () -> lrem "mylist" (-1) "value")
+    "*4\r\n$4\r\nLREM\r\n$6\r\nmylist\r\n$2\r\n-1\r\n$5\r\nvalue\r\n";
+
+  test_command_serialization
+    "lrem command zero count"
+    (fun () -> lrem "mylist" 0 "value")
+    "*4\r\n$4\r\nLREM\r\n$6\r\nmylist\r\n$1\r\n0\r\n$5\r\nvalue\r\n";
+
+  test_command_serialization
+    "linsert before"
+    (fun () -> linsert "mylist" ~before:true "pivot" "newvalue")
+    "*5\r\n$7\r\nLINSERT\r\n$6\r\nmylist\r\n$6\r\nBEFORE\r\n$5\r\npivot\r\n$8\r\nnewvalue\r\n";
+
+  test_command_serialization
+    "linsert after"
+    (fun () -> linsert "mylist" ~before:false "pivot" "newvalue")
+    "*5\r\n$7\r\nLINSERT\r\n$6\r\nmylist\r\n$5\r\nAFTER\r\n$5\r\npivot\r\n$8\r\nnewvalue\r\n";
+
+  test_command_serialization
+    "blpop single key"
+    (fun () -> blpop ["mylist"] 10.0)
+    "*3\r\n$5\r\nBLPOP\r\n$6\r\nmylist\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "blpop multiple keys"
+    (fun () -> blpop ["list1"; "list2"; "list3"] 5.5)
+    "*5\r\n$5\r\nBLPOP\r\n$5\r\nlist1\r\n$5\r\nlist2\r\n$5\r\nlist3\r\n$3\r\n5.5\r\n";
+
+  test_command_serialization
+    "brpop single key"
+    (fun () -> brpop ["mylist"] 0.0)
+    "*3\r\n$5\r\nBRPOP\r\n$6\r\nmylist\r\n$1\r\n0\r\n";
+
+  test_command_serialization
+    "brpop multiple keys"
+    (fun () -> brpop ["list1"; "list2"] 30.0)
+    "*4\r\n$5\r\nBRPOP\r\n$5\r\nlist1\r\n$5\r\nlist2\r\n$2\r\n30\r\n";
+
+  test_command_serialization
+    "brpoplpush command"
+    (fun () -> brpoplpush "source" "dest" 15.0)
+    "*4\r\n$10\r\nBRPOPLPUSH\r\n$6\r\nsource\r\n$4\r\ndest\r\n$2\r\n15\r\n";
+
+  test_command_serialization
+    "rpoplpush command"
+    (fun () -> rpoplpush "source" "dest")
+    "*3\r\n$9\r\nRPOPLPUSH\r\n$6\r\nsource\r\n$4\r\ndest\r\n";
+
+  (* Test round-trip serialization for list commands *)
+  test_command_roundtrip
+    "lpush roundtrip"
+    (fun () -> lpush "mylist" ["val1"; "val2"; "val3"])
+    (lpush "mylist" ["val1"; "val2"; "val3"]);
+
+  test_command_roundtrip
+    "rpush roundtrip"
+    (fun () -> rpush "mylist" ["val1"; "val2"])
+    (rpush "mylist" ["val1"; "val2"]);
+
+  test_command_roundtrip
+    "lpop roundtrip"
+    (fun () -> lpop "mylist")
+    (lpop "mylist");
+
+  test_command_roundtrip
+    "rpop roundtrip"
+    (fun () -> rpop "mylist")
+    (rpop "mylist");
+
+  test_command_roundtrip
+    "llen roundtrip"
+    (fun () -> llen "mylist")
+    (llen "mylist");
+
+  test_command_roundtrip
+    "lrange roundtrip"
+    (fun () -> lrange "mylist" 1 10)
+    (lrange "mylist" 1 10);
+
+  test_command_roundtrip
+    "lindex roundtrip"
+    (fun () -> lindex "mylist" 5)
+    (lindex "mylist" 5);
+
+  test_command_roundtrip
+    "ltrim roundtrip"
+    (fun () -> ltrim "mylist" 0 99)
+    (ltrim "mylist" 0 99);
+
+  test_command_roundtrip
+    "lset roundtrip"
+    (fun () -> lset "mylist" 3 "replacement")
+    (lset "mylist" 3 "replacement");
+
+  test_command_roundtrip
+    "lrem roundtrip"
+    (fun () -> lrem "mylist" (-2) "target")
+    (lrem "mylist" (-2) "target");
+
+  test_command_roundtrip
+    "linsert roundtrip"
+    (fun () -> linsert "mylist" ~before:true "anchor" "insertion")
+    (linsert "mylist" ~before:true "anchor" "insertion");
+
+  test_command_roundtrip
+    "blpop roundtrip"
+    (fun () -> blpop ["queue1"; "queue2"] 60.0)
+    (blpop ["queue1"; "queue2"] 60.0);
+
+  test_command_roundtrip
+    "brpop roundtrip"
+    (fun () -> brpop ["queue1"; "queue2"; "queue3"] 120.5)
+    (brpop ["queue1"; "queue2"; "queue3"] 120.5);
+
+  test_command_roundtrip
+    "brpoplpush roundtrip"
+    (fun () -> brpoplpush "workqueue" "processing" 45.0)
+    (brpoplpush "workqueue" "processing" 45.0);
+
+  test_command_roundtrip
+    "rpoplpush roundtrip"
+    (fun () -> rpoplpush "source_list" "dest_list")
+    (rpoplpush "source_list" "dest_list");
 ]
 
 (* Set Commands *)
