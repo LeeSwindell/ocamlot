@@ -24,38 +24,33 @@ let ping ?message () =
   | Some msg -> Array (Some [BulkString (Some "PING"); BulkString (Some msg)])
 
 (** ECHO message - Echo the given string *)
-let echo _message = 
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let echo message = 
+  Array (Some [BulkString (Some "ECHO"); BulkString (Some message)])
 
 (** QUIT - Close the connection *)
 let quit () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+  Array (Some [BulkString (Some "QUIT")])
 
 (** SELECT index - Change the selected database *)
-let select _db_index =
-  (* TODO: Implementation *)  
-  failwith "Not implemented"
+let select db_index =
+  Array (Some [BulkString (Some "SELECT"); BulkString (Some (string_of_int db_index))])
 
 (* =============================================================================
    KEY MANAGEMENT COMMANDS
    ============================================================================= *)
 
 (** EXISTS key [key ...] - Check if keys exist *)
-let exists _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let exists keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "EXISTS") :: key_args))
 
 (** TYPE key - Get the type of a key *)
-let type_of_key _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let type_of_key key =
+  Array (Some [BulkString (Some "TYPE"); BulkString (Some key)])
 
 (** EXPIRE key seconds - Set key expiration *)
-let expire _key _seconds =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let expire key seconds =
+  Array (Some [BulkString (Some "EXPIRE"); BulkString (Some key); BulkString (Some (string_of_int seconds))])
 
 (** EXPIREAT key timestamp - Set key expiration at timestamp *)
 let expireat _key _timestamp =
@@ -63,9 +58,8 @@ let expireat _key _timestamp =
   failwith "Not implemented"
 
 (** TTL key - Get time to live *)
-let ttl _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let ttl key =
+  Array (Some [BulkString (Some "TTL"); BulkString (Some key)])
 
 (** PERSIST key - Remove expiration *)
 let persist _key =
@@ -73,9 +67,8 @@ let persist _key =
   failwith "Not implemented"
 
 (** RENAME key newkey - Rename a key *)
-let rename _key _newkey =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let rename key newkey =
+  Array (Some [BulkString (Some "RENAME"); BulkString (Some key); BulkString (Some newkey)])
 
 (** RENAMENX key newkey - Rename key if new key doesn't exist *)
 let renamenx _key _newkey =
@@ -132,14 +125,15 @@ let set key value ?ex:_ex ?px:_px ?nx:_nx ?xx:_xx () =
   Array (Some cmd)
 
 (** MGET key [key ...] - Get multiple values *)
-let mget _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let mget keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "MGET") :: key_args))
 
 (** MSET key value [key value ...] - Set multiple key-value pairs *)
-let mset _key_values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let mset key_values =
+  let args = List.fold_right (fun (key, value) acc ->
+    BulkString (Some key) :: BulkString (Some value) :: acc) key_values [] in
+  Array (Some (BulkString (Some "MSET") :: args))
 
 (** MSETNX key value [key value ...] - Set multiple if none exist *)
 let msetnx _key_values =
@@ -171,9 +165,8 @@ let incr key =
   Array (Some [BulkString (Some "INCR"); BulkString (Some key)])
 
 (** INCRBY key increment - Increment by amount *)
-let incrby _key _increment =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let incrby key increment =
+  Array (Some [BulkString (Some "INCRBY"); BulkString (Some key); BulkString (Some (string_of_int increment))])
 
 (** INCRBYFLOAT key increment - Increment by float *)
 let incrbyfloat _key _increment =
@@ -181,9 +174,8 @@ let incrbyfloat _key _increment =
   failwith "Not implemented"
 
 (** DECR key - Decrement integer value *)
-let decr _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let decr key =
+  Array (Some [BulkString (Some "DECR"); BulkString (Some key)])
 
 (** DECRBY key decrement - Decrement by amount *)
 let decrby _key _decrement =
@@ -191,14 +183,12 @@ let decrby _key _decrement =
   failwith "Not implemented"
 
 (** APPEND key value - Append to string *)
-let append _key _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let append key value =
+  Array (Some [BulkString (Some "APPEND"); BulkString (Some key); BulkString (Some value)])
 
 (** STRLEN key - Get string length *)
-let strlen _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let strlen key =
+  Array (Some [BulkString (Some "STRLEN"); BulkString (Some key)])
 
 (** GETRANGE key start end - Get substring *)
 let getrange _key _start_pos _end_pos =
@@ -227,9 +217,9 @@ let hset key field_values =
   Array (Some cmd)
 
 (** HMGET key field [field ...] - Get multiple hash fields *)
-let hmget _key _fields =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hmget key fields =
+  let field_args = List.map (fun f -> BulkString (Some f)) fields in
+  Array (Some (BulkString (Some "HMGET") :: BulkString (Some key) :: field_args))
 
 (** HMSET key field value [field value ...] - Set multiple hash fields *)
 let hmset _key _field_values =
@@ -237,34 +227,29 @@ let hmset _key _field_values =
   failwith "Not implemented"
 
 (** HGETALL key - Get all hash fields and values *)
-let hgetall _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hgetall key =
+  Array (Some [BulkString (Some "HGETALL"); BulkString (Some key)])
 
 (** HKEYS key - Get all hash field names *)
-let hkeys _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hkeys key =
+  Array (Some [BulkString (Some "HKEYS"); BulkString (Some key)])
 
 (** HVALS key - Get all hash values *)
-let hvals _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hvals key =
+  Array (Some [BulkString (Some "HVALS"); BulkString (Some key)])
 
 (** HLEN key - Get hash field count *)
-let hlen _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hlen key =
+  Array (Some [BulkString (Some "HLEN"); BulkString (Some key)])
 
 (** HDEL key field [field ...] - Delete hash fields *)
-let hdel _key _fields =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hdel key fields =
+  let field_args = List.map (fun f -> BulkString (Some f)) fields in
+  Array (Some (BulkString (Some "HDEL") :: BulkString (Some key) :: field_args))
 
 (** HEXISTS key field - Check if hash field exists *)
-let hexists _key _field =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let hexists key field =
+  Array (Some [BulkString (Some "HEXISTS"); BulkString (Some key); BulkString (Some field)])
 
 (** HINCRBY key field increment - Increment hash field by integer *)
 let hincrby _key _field _increment =
@@ -301,28 +286,26 @@ let lpush key values =
   Array (Some (BulkString (Some "LPUSH") :: BulkString (Some key) :: value_args))
 
 (** RPUSH key value [value ...] - Push to list tail *)
-let rpush _key _values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let rpush key values =
+  let value_args = List.map (fun v -> BulkString (Some v)) values in
+  Array (Some (BulkString (Some "RPUSH") :: BulkString (Some key) :: value_args))
 
 (** LPOP key - Pop from list head *)
-let lpop _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let lpop key =
+  Array (Some [BulkString (Some "LPOP"); BulkString (Some key)])
 
 (** RPOP key - Pop from list tail *)
 let rpop key =
   Array (Some [BulkString (Some "RPOP"); BulkString (Some key)])
 
 (** LLEN key - Get list length *)
-let llen _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let llen key =
+  Array (Some [BulkString (Some "LLEN"); BulkString (Some key)])
 
 (** LRANGE key start stop - Get list range *)
-let lrange _key _start_idx _stop_idx =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let lrange key start_idx stop_idx =
+  Array (Some [BulkString (Some "LRANGE"); BulkString (Some key); 
+               BulkString (Some (string_of_int start_idx)); BulkString (Some (string_of_int stop_idx))])
 
 (** LTRIM key start stop - Trim list to range *)
 let ltrim _key _start_idx _stop_idx =
@@ -330,9 +313,8 @@ let ltrim _key _start_idx _stop_idx =
   failwith "Not implemented"
 
 (** LINDEX key index - Get list element by index *)
-let lindex _key _index =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let lindex key index =
+  Array (Some [BulkString (Some "LINDEX"); BulkString (Some key); BulkString (Some (string_of_int index))])
 
 (** LSET key index value - Set list element by index *)
 let lset _key _index _value =
@@ -374,29 +356,26 @@ let rpoplpush _source _destination =
    ============================================================================= *)
 
 (** SADD key member [member ...] - Add to set *)
-let sadd _key _members =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sadd key members =
+  let member_args = List.map (fun m -> BulkString (Some m)) members in
+  Array (Some (BulkString (Some "SADD") :: BulkString (Some key) :: member_args))
 
 (** SREM key member [member ...] - Remove from set *)
-let srem _key _members =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let srem key members =
+  let member_args = List.map (fun m -> BulkString (Some m)) members in
+  Array (Some (BulkString (Some "SREM") :: BulkString (Some key) :: member_args))
 
 (** SCARD key - Get set cardinality *)
-let scard _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let scard key =
+  Array (Some [BulkString (Some "SCARD"); BulkString (Some key)])
 
 (** SISMEMBER key member - Check set membership *)
-let sismember _key _member =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sismember key member =
+  Array (Some [BulkString (Some "SISMEMBER"); BulkString (Some key); BulkString (Some member)])
 
 (** SMEMBERS key - Get all set members *)
-let smembers _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let smembers key =
+  Array (Some [BulkString (Some "SMEMBERS"); BulkString (Some key)])
 
 (** SRANDMEMBER key [count] - Get random set member(s) *)
 let srandmember _key ?count:_count () =
@@ -414,9 +393,9 @@ let smove _source _destination _member =
   failwith "Not implemented"
 
 (** SINTER key [key ...] - Set intersection *)
-let sinter _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sinter keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "SINTER") :: key_args))
 
 (** SINTERSTORE destination key [key ...] - Store set intersection *)
 let sinterstore _destination _keys =
@@ -453,19 +432,19 @@ let sscan _key _cursor ?pattern:_pattern ?count:_count () =
    ============================================================================= *)
 
 (** ZADD key score member [score member ...] - Add to sorted set *)
-let zadd _key ?nx:_nx ?xx:_xx ?ch:_ch ?incr:_incr _score_members =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zadd key ?nx:_nx ?xx:_xx ?ch:_ch ?incr:_incr score_members =
+  let score_member_args = List.fold_right (fun (score, member) acc ->
+    BulkString (Some (string_of_float score)) :: BulkString (Some member) :: acc) score_members [] in
+  Array (Some (BulkString (Some "ZADD") :: BulkString (Some key) :: score_member_args))
 
 (** ZREM key member [member ...] - Remove from sorted set *)
-let zrem _key _members =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrem key members =
+  let member_args = List.map (fun m -> BulkString (Some m)) members in
+  Array (Some (BulkString (Some "ZREM") :: BulkString (Some key) :: member_args))
 
 (** ZCARD key - Get sorted set cardinality *)
-let zcard _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zcard key =
+  Array (Some [BulkString (Some "ZCARD"); BulkString (Some key)])
 
 (** ZCOUNT key min max - Count members in score range *)
 let zcount _key _min_score _max_score =
@@ -473,14 +452,12 @@ let zcount _key _min_score _max_score =
   failwith "Not implemented"
 
 (** ZSCORE key member - Get member score *)
-let zscore _key _member =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zscore key member =
+  Array (Some [BulkString (Some "ZSCORE"); BulkString (Some key); BulkString (Some member)])
 
 (** ZRANK key member - Get member rank (ascending) *)
-let zrank _key _member =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrank key member =
+  Array (Some [BulkString (Some "ZRANK"); BulkString (Some key); BulkString (Some member)])
 
 (** ZREVRANK key member - Get member rank (descending) *)
 let zrevrank _key _member =
@@ -488,9 +465,13 @@ let zrevrank _key _member =
   failwith "Not implemented"
 
 (** ZRANGE key start stop [WITHSCORES] - Get range by rank *)
-let zrange _key _start_idx _stop_idx ?withscores:_withscores () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let zrange key start_idx stop_idx ?withscores () =
+  let base_cmd = [BulkString (Some "ZRANGE"); BulkString (Some key); 
+                  BulkString (Some (string_of_int start_idx)); BulkString (Some (string_of_int stop_idx))] in
+  let cmd = match withscores with
+    | Some true -> base_cmd @ [BulkString (Some "WITHSCORES")]
+    | _ -> base_cmd in
+  Array (Some cmd)
 
 (** ZREVRANGE key start stop [WITHSCORES] - Get range by rank (descending) *)
 let zrevrange _key _start_idx _stop_idx ?withscores:_withscores () =
@@ -649,24 +630,26 @@ let xtrim _key ~maxlen:_maxlen ?approximate:_approximate _count =
    ============================================================================= *)
 
 (** PUBLISH channel message - Publish message *)
-let publish _channel _message =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let publish channel message =
+  Array (Some [BulkString (Some "PUBLISH"); BulkString (Some channel); BulkString (Some message)])
 
 (** SUBSCRIBE channel [channel ...] - Subscribe to channels *)
-let subscribe _channels =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let subscribe channels =
+  let channel_args = List.map (fun c -> BulkString (Some c)) channels in
+  Array (Some (BulkString (Some "SUBSCRIBE") :: channel_args))
 
 (** UNSUBSCRIBE [channel [channel ...]] - Unsubscribe from channels *)
-let unsubscribe ?channels:_channels () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let unsubscribe ?channels () =
+  match channels with
+  | None -> Array (Some [BulkString (Some "UNSUBSCRIBE")])
+  | Some chans ->
+      let channel_args = List.map (fun c -> BulkString (Some c)) chans in
+      Array (Some (BulkString (Some "UNSUBSCRIBE") :: channel_args))
 
 (** PSUBSCRIBE pattern [pattern ...] - Subscribe to patterns *)
-let psubscribe _patterns =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let psubscribe patterns =
+  let pattern_args = List.map (fun p -> BulkString (Some p)) patterns in
+  Array (Some (BulkString (Some "PSUBSCRIBE") :: pattern_args))
 
 (** PUNSUBSCRIBE [pattern [pattern ...]] - Unsubscribe from patterns *)
 let punsubscribe ?patterns:_patterns () =
@@ -694,28 +677,24 @@ let pubsub_numpat () =
 
 (** MULTI - Start transaction *)
 let multi () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+  Array (Some [BulkString (Some "MULTI")])
 
 (** EXEC - Execute transaction *)
 let exec () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+  Array (Some [BulkString (Some "EXEC")])
 
 (** DISCARD - Discard transaction *)
 let discard () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+  Array (Some [BulkString (Some "DISCARD")])
 
 (** WATCH key [key ...] - Watch keys for changes *)
-let watch _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let watch keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "WATCH") :: key_args))
 
 (** UNWATCH - Stop watching all keys *)
 let unwatch () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+  Array (Some [BulkString (Some "UNWATCH")])
 
 (* =============================================================================
    SERVER COMMANDS

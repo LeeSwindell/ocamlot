@@ -42,63 +42,63 @@ let ping_command_tests = [
   test_command_roundtrip 
     "ping without message" 
     (fun () -> ping ())
-    (Array (Some [BulkString (Some "PING")]));
+    (ping ());
     
   (* PING with various message types *)
   test_command_roundtrip 
     "ping with simple message" 
     (fun () -> ping ~message:"hello" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "hello")]));
+    (ping ~message:"hello" ());
     
   test_command_roundtrip 
     "ping with empty message" 
     (fun () -> ping ~message:"" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "")]));
+    (ping ~message:"" ());
     
   test_command_roundtrip 
     "ping with space in message" 
     (fun () -> ping ~message:"hello world" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "hello world")]));
+    (ping ~message:"hello world" ());
     
   test_command_roundtrip 
     "ping with newline in message" 
     (fun () -> ping ~message:"hello\nworld" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "hello\nworld")]));
+    (ping ~message:"hello\nworld" ());
     
   test_command_roundtrip 
     "ping with carriage return and newline" 
     (fun () -> ping ~message:"hello\r\nworld" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "hello\r\nworld")]));
+    (ping ~message:"hello\r\nworld" ());
     
   test_command_roundtrip 
     "ping with tab character" 
     (fun () -> ping ~message:"hello\tworld" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "hello\tworld")]));
+    (ping ~message:"hello\tworld" ());
     
   test_command_roundtrip 
     "ping with special characters" 
     (fun () -> ping ~message:"!@#$%^&*()_+-=[]{}|;':\",./<>?" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "!@#$%^&*()_+-=[]{}|;':\",./<>?")]));
+    (ping ~message:"!@#$%^&*()_+-=[]{}|;':\",./<>?" ());
     
   test_command_roundtrip 
     "ping with unicode emoji" 
     (fun () -> ping ~message:"Hello 👋 World 🌍" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "Hello 👋 World 🌍")]));
+    (ping ~message:"Hello 👋 World 🌍" ());
     
   test_command_roundtrip 
     "ping with unicode characters" 
     (fun () -> ping ~message:"你好世界" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "你好世界")]));
+    (ping ~message:"你好世界" ());
     
   test_command_roundtrip 
     "ping with very long message" 
     (fun () -> ping ~message:(String.make 1000 'x') ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some (String.make 1000 'x'))]));
+    (ping ~message:(String.make 1000 'x') ());
     
   test_command_roundtrip 
     "ping with null bytes in message" 
     (fun () -> ping ~message:"hello\x00world" ())
-    (Array (Some [BulkString (Some "PING"); BulkString (Some "hello\x00world")]));
+    (ping ~message:"hello\x00world" ());
 ]
 
 (* Serialization format tests - verify the exact wire format *)
@@ -134,7 +134,7 @@ let get_command_tests = [
   test_command_roundtrip
     "get command structure"
     (fun () -> get "key")
-    (Array (Some [BulkString (Some "GET"); BulkString (Some "key")]));
+    (get "key");
     
   test_command_serialization
     "get canonical wire format"
@@ -152,7 +152,7 @@ let set_command_tests = [
   test_command_roundtrip
     "set command structure"
     (fun () -> set "key" "value" ())
-    (Array (Some [BulkString (Some "SET"); BulkString (Some "key"); BulkString (Some "value")]));
+    (set "key" "value" ());
     
   test_command_serialization
     "set canonical wire format"
@@ -170,7 +170,7 @@ let hget_command_tests = [
   test_command_roundtrip
     "hget command structure"
     (fun () -> hget "myhash" "field")
-    (Array (Some [BulkString (Some "HGET"); BulkString (Some "myhash"); BulkString (Some "field")]));
+    (hget "myhash" "field");
     
   test_command_serialization
     "hget canonical wire format"
@@ -183,7 +183,7 @@ let hset_command_tests = [
   test_command_roundtrip
     "hset single field command structure"
     (fun () -> hset "myhash" [("field", "value")])
-    (Array (Some [BulkString (Some "HSET"); BulkString (Some "myhash"); BulkString (Some "field"); BulkString (Some "value")]));
+    (hset "myhash" [("field", "value")]);
     
   test_command_serialization
     "hset single field canonical wire format"
@@ -193,9 +193,7 @@ let hset_command_tests = [
   test_command_roundtrip
     "hset multiple fields command structure"
     (fun () -> hset "myhash" [("field1", "value1"); ("field2", "value2")])
-    (Array (Some [BulkString (Some "HSET"); BulkString (Some "myhash"); 
-                  BulkString (Some "field1"); BulkString (Some "value1"); 
-                  BulkString (Some "field2"); BulkString (Some "value2")]));
+    (hset "myhash" [("field1", "value1"); ("field2", "value2")]);
 ]
 
 (* INCR Command Tests - Canonical Examples *)
@@ -203,7 +201,7 @@ let incr_command_tests = [
   test_command_roundtrip
     "incr command structure"
     (fun () -> incr "mycounter")
-    (Array (Some [BulkString (Some "INCR"); BulkString (Some "mycounter")]));
+    (incr "mycounter");
     
   test_command_serialization
     "incr canonical wire format"
@@ -216,7 +214,7 @@ let del_command_tests = [
   test_command_roundtrip
     "del single key command structure"
     (fun () -> del ["key"])
-    (Array (Some [BulkString (Some "DEL"); BulkString (Some "key")]));
+    (del ["key"]);
     
   test_command_serialization
     "del single key canonical wire format"
@@ -226,8 +224,7 @@ let del_command_tests = [
   test_command_roundtrip
     "del multiple keys command structure"
     (fun () -> del ["key1"; "key2"; "key3"])
-    (Array (Some [BulkString (Some "DEL"); BulkString (Some "key1"); 
-                  BulkString (Some "key2"); BulkString (Some "key3")]));
+    (del ["key1"; "key2"; "key3"]);
     
   test_command_serialization
     "del multiple keys canonical wire format"
@@ -287,16 +284,13 @@ let edge_case_tests = [
 let boolean_response_tests = [
   (* SISMEMBER returns boolean in RESP3 *)
   test_command_roundtrip
-    "hypothetical sismember command structure"
-    (fun () -> 
-      (* This would be: SISMEMBER myset member *)
-      Array (Some [BulkString (Some "SISMEMBER"); BulkString (Some "myset"); BulkString (Some "member")]))
-    (Array (Some [BulkString (Some "SISMEMBER"); BulkString (Some "myset"); BulkString (Some "member")]));
+    "sismember command structure"
+    (fun () -> sismember "myset" "member")
+    (sismember "myset" "member");
     
   test_command_serialization
     "sismember wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "SISMEMBER"); BulkString (Some "myset"); BulkString (Some "member")]))
+    (fun () -> sismember "myset" "member")
     "*3\r\n$9\r\nSISMEMBER\r\n$5\r\nmyset\r\n$6\r\nmember\r\n";
 ]
 
@@ -304,16 +298,13 @@ let boolean_response_tests = [
 let double_response_tests = [
   (* ZSCORE returns double in RESP3 *)
   test_command_roundtrip
-    "hypothetical zscore command structure"
-    (fun () -> 
-      (* This would be: ZSCORE myzset member *)
-      Array (Some [BulkString (Some "ZSCORE"); BulkString (Some "myzset"); BulkString (Some "member")]))
-    (Array (Some [BulkString (Some "ZSCORE"); BulkString (Some "myzset"); BulkString (Some "member")]));
+    "zscore command structure"
+    (fun () -> zscore "myzset" "member")
+    (zscore "myzset" "member");
     
   test_command_serialization
     "zscore wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "ZSCORE"); BulkString (Some "myzset"); BulkString (Some "member")]))
+    (fun () -> zscore "myzset" "member")
     "*3\r\n$6\r\nZSCORE\r\n$6\r\nmyzset\r\n$6\r\nmember\r\n";
 ]
 
@@ -321,16 +312,13 @@ let double_response_tests = [
 let map_response_tests = [
   (* HGETALL returns map in RESP3 *)
   test_command_roundtrip
-    "hypothetical hgetall command structure"
-    (fun () -> 
-      (* This would be: HGETALL myhash *)
-      Array (Some [BulkString (Some "HGETALL"); BulkString (Some "myhash")]))
-    (Array (Some [BulkString (Some "HGETALL"); BulkString (Some "myhash")]));
+    "hgetall command structure"
+    (fun () -> hgetall "myhash")
+    (hgetall "myhash");
     
   test_command_serialization
     "hgetall wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "HGETALL"); BulkString (Some "myhash")]))
+    (fun () -> hgetall "myhash")
     "*2\r\n$7\r\nHGETALL\r\n$6\r\nmyhash\r\n";
 ]
 
@@ -338,16 +326,13 @@ let map_response_tests = [
 let set_response_tests = [
   (* SMEMBERS returns set in RESP3 *)
   test_command_roundtrip
-    "hypothetical smembers command structure"
-    (fun () -> 
-      (* This would be: SMEMBERS myset *)
-      Array (Some [BulkString (Some "SMEMBERS"); BulkString (Some "myset")]))
-    (Array (Some [BulkString (Some "SMEMBERS"); BulkString (Some "myset")]));
+    "smembers command structure"
+    (fun () -> smembers "myset")
+    (smembers "myset");
     
   test_command_serialization
     "smembers wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "SMEMBERS"); BulkString (Some "myset")]))
+    (fun () -> smembers "myset")
     "*2\r\n$8\r\nSMEMBERS\r\n$5\r\nmyset\r\n";
 ]
 
@@ -357,31 +342,28 @@ let integer_response_tests = [
   test_command_roundtrip
     "incr returns integer response"
     (fun () -> incr "counter")
-    (Array (Some [BulkString (Some "INCR"); BulkString (Some "counter")]));
+    (incr "counter");
     
   (* DEL returns integer count *)
   test_command_roundtrip
     "del returns integer count"
     (fun () -> del ["key1"; "key2"])
-    (Array (Some [BulkString (Some "DEL"); BulkString (Some "key1"); BulkString (Some "key2")]));
+    (del ["key1"; "key2"]);
     
   (* These commands would return various integer values *)
   test_command_serialization
     "strlen wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "STRLEN"); BulkString (Some "mykey")]))
+    (fun () -> strlen "mykey")
     "*2\r\n$6\r\nSTRLEN\r\n$5\r\nmykey\r\n";
     
   test_command_serialization
     "llen wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "LLEN"); BulkString (Some "mylist")]))
+    (fun () -> llen "mylist")
     "*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n";
     
   test_command_serialization
     "scard wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "SCARD"); BulkString (Some "myset")]))
+    (fun () -> scard "myset")
     "*2\r\n$5\r\nSCARD\r\n$5\r\nmyset\r\n";
 ]
 
@@ -391,13 +373,13 @@ let null_response_tests = [
   test_command_roundtrip
     "get non-existent key"
     (fun () -> get "nonexistent")
-    (Array (Some [BulkString (Some "GET"); BulkString (Some "nonexistent")]));
+    (get "nonexistent");
     
   (* HGET on non-existent field returns null *)
   test_command_roundtrip
     "hget non-existent field"
     (fun () -> hget "myhash" "nonexistent")
-    (Array (Some [BulkString (Some "HGET"); BulkString (Some "myhash"); BulkString (Some "nonexistent")]));
+    (hget "myhash" "nonexistent");
 ]
 
 (* Commands demonstrating arrays with mixed types *)
@@ -405,8 +387,7 @@ let mixed_array_tests = [
   (* MGET returns array of bulk strings (some may be null) *)
   test_command_serialization
     "mget multiple keys wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "MGET"); BulkString (Some "key1"); BulkString (Some "key2"); BulkString (Some "key3")]))
+    (fun () -> mget ["key1"; "key2"; "key3"])
     "*4\r\n$4\r\nMGET\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n$4\r\nkey3\r\n";
     
   (* HMGET returns array of bulk strings *)
@@ -420,9 +401,7 @@ let mixed_array_tests = [
   (* LRANGE returns array of bulk strings *)
   test_command_serialization
     "lrange wire format"
-    (fun () -> 
-      Array (Some [BulkString (Some "LRANGE"); BulkString (Some "mylist"); 
-                   BulkString (Some "0"); BulkString (Some "-1")]))
+    (fun () -> lrange "mylist" 0 (-1))
     "*4\r\n$6\r\nLRANGE\r\n$6\r\nmylist\r\n$1\r\n0\r\n$2\r\n-1\r\n";
 ]
 
@@ -462,22 +441,22 @@ let connection_server_tests = [
   (* PING - already tested above *)
   test_command_serialization
     "echo command"
-    (fun () -> Array (Some [BulkString (Some "ECHO"); BulkString (Some "Hello World")]))
+    (fun () -> echo "Hello World")
     "*2\r\n$4\r\nECHO\r\n$11\r\nHello World\r\n";
     
   test_command_serialization
     "select database"
-    (fun () -> Array (Some [BulkString (Some "SELECT"); BulkString (Some "1")]))
+    (fun () -> select 1)
     "*2\r\n$6\r\nSELECT\r\n$1\r\n1\r\n";
     
   test_command_serialization
     "quit connection"
-    (fun () -> Array (Some [BulkString (Some "QUIT")]))
+    (fun () -> quit ())
     "*1\r\n$4\r\nQUIT\r\n";
     
   test_command_serialization
     "info server"
-    (fun () -> Array (Some [BulkString (Some "INFO")]))
+    (fun () -> info ())
     "*1\r\n$4\r\nINFO\r\n";
 ]
 
@@ -486,32 +465,32 @@ let key_management_tests = [
   (* DEL - already tested above *)
   test_command_serialization
     "exists single key"
-    (fun () -> Array (Some [BulkString (Some "EXISTS"); BulkString (Some "mykey")]))
+    (fun () -> exists ["mykey"])
     "*2\r\n$6\r\nEXISTS\r\n$5\r\nmykey\r\n";
     
   test_command_serialization
     "exists multiple keys"
-    (fun () -> Array (Some [BulkString (Some "EXISTS"); BulkString (Some "key1"); BulkString (Some "key2")]))
+    (fun () -> exists ["key1"; "key2"])
     "*3\r\n$6\r\nEXISTS\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n";
     
   test_command_serialization
     "type command"
-    (fun () -> Array (Some [BulkString (Some "TYPE"); BulkString (Some "mykey")]))
+    (fun () -> type_of_key "mykey")
     "*2\r\n$4\r\nTYPE\r\n$5\r\nmykey\r\n";
     
   test_command_serialization
     "expire with seconds"
-    (fun () -> Array (Some [BulkString (Some "EXPIRE"); BulkString (Some "mykey"); BulkString (Some "300")]))
+    (fun () -> expire "mykey" 300)
     "*3\r\n$6\r\nEXPIRE\r\n$5\r\nmykey\r\n$3\r\n300\r\n";
     
   test_command_serialization
     "ttl command"
-    (fun () -> Array (Some [BulkString (Some "TTL"); BulkString (Some "mykey")]))
+    (fun () -> ttl "mykey")
     "*2\r\n$3\r\nTTL\r\n$5\r\nmykey\r\n";
     
   test_command_serialization
     "rename command"
-    (fun () -> Array (Some [BulkString (Some "RENAME"); BulkString (Some "oldkey"); BulkString (Some "newkey")]))
+    (fun () -> rename "oldkey" "newkey")
     "*3\r\n$6\r\nRENAME\r\n$6\r\noldkey\r\n$6\r\nnewkey\r\n";
 ]
 
@@ -519,7 +498,7 @@ let key_management_tests = [
 let string_command_tests = [
   test_command_serialization
     "mget multiple keys"
-    (fun () -> Array (Some [BulkString (Some "MGET"); BulkString (Some "key1"); BulkString (Some "key2"); BulkString (Some "key3")]))
+    (fun () -> mget ["key1"; "key2"; "key3"])
     "*4\r\n$4\r\nMGET\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n$4\r\nkey3\r\n";
     
   test_command_serialization
@@ -530,22 +509,22 @@ let string_command_tests = [
     
   test_command_serialization
     "incrby with amount"
-    (fun () -> Array (Some [BulkString (Some "INCRBY"); BulkString (Some "mycounter"); BulkString (Some "5")]))
+    (fun () -> incrby "mycounter" 5)
     "*3\r\n$6\r\nINCRBY\r\n$9\r\nmycounter\r\n$1\r\n5\r\n";
     
   test_command_serialization
     "decr command"
-    (fun () -> Array (Some [BulkString (Some "DECR"); BulkString (Some "mycounter")]))
+    (fun () -> decr "mycounter")
     "*2\r\n$4\r\nDECR\r\n$9\r\nmycounter\r\n";
     
   test_command_serialization
     "append command"
-    (fun () -> Array (Some [BulkString (Some "APPEND"); BulkString (Some "mykey"); BulkString (Some "suffix")]))
+    (fun () -> append "mykey" "suffix")
     "*3\r\n$6\r\nAPPEND\r\n$5\r\nmykey\r\n$6\r\nsuffix\r\n";
     
   test_command_serialization
     "strlen command"
-    (fun () -> Array (Some [BulkString (Some "STRLEN"); BulkString (Some "mykey")]))
+    (fun () -> strlen "mykey")
     "*2\r\n$6\r\nSTRLEN\r\n$5\r\nmykey\r\n";
 ]
 
