@@ -1135,39 +1135,190 @@ let list_command_tests = [
 let redis_set_command_tests = [
   test_command_serialization
     "sadd single member"
-    (fun () -> Array (Some [BulkString (Some "SADD"); BulkString (Some "myset"); BulkString (Some "member")]))
+    (fun () -> sadd "myset" ["member"])
     "*3\r\n$4\r\nSADD\r\n$5\r\nmyset\r\n$6\r\nmember\r\n";
     
   test_command_serialization
     "sadd multiple members"
-    (fun () -> Array (Some [BulkString (Some "SADD"); BulkString (Some "myset"); 
-                           BulkString (Some "member1"); BulkString (Some "member2")]))
+    (fun () -> sadd "myset" ["member1"; "member2"])
     "*4\r\n$4\r\nSADD\r\n$5\r\nmyset\r\n$7\r\nmember1\r\n$7\r\nmember2\r\n";
     
   test_command_serialization
     "srem command"
-    (fun () -> Array (Some [BulkString (Some "SREM"); BulkString (Some "myset"); BulkString (Some "member")]))
+    (fun () -> srem "myset" ["member"])
     "*3\r\n$4\r\nSREM\r\n$5\r\nmyset\r\n$6\r\nmember\r\n";
     
   test_command_serialization
     "scard command"
-    (fun () -> Array (Some [BulkString (Some "SCARD"); BulkString (Some "myset")]))
+    (fun () -> scard "myset")
     "*2\r\n$5\r\nSCARD\r\n$5\r\nmyset\r\n";
     
   test_command_serialization
     "sismember command"
-    (fun () -> Array (Some [BulkString (Some "SISMEMBER"); BulkString (Some "myset"); BulkString (Some "member")]))
+    (fun () -> sismember "myset" "member")
     "*3\r\n$9\r\nSISMEMBER\r\n$5\r\nmyset\r\n$6\r\nmember\r\n";
     
   test_command_serialization
     "smembers command"
-    (fun () -> Array (Some [BulkString (Some "SMEMBERS"); BulkString (Some "myset")]))
+    (fun () -> smembers "myset")
     "*2\r\n$8\r\nSMEMBERS\r\n$5\r\nmyset\r\n";
     
   test_command_serialization
     "sinter command"
-    (fun () -> Array (Some [BulkString (Some "SINTER"); BulkString (Some "set1"); BulkString (Some "set2")]))
+    (fun () -> sinter ["set1"; "set2"])
     "*3\r\n$6\r\nSINTER\r\n$4\r\nset1\r\n$4\r\nset2\r\n";
+
+  (* Additional set commands *)
+  test_command_serialization
+    "srandmember without count"
+    (fun () -> srandmember "myset" ())
+    "*2\r\n$11\r\nSRANDMEMBER\r\n$5\r\nmyset\r\n";
+
+  test_command_serialization
+    "srandmember with count"
+    (fun () -> srandmember "myset" ~count:3 ())
+    "*3\r\n$11\r\nSRANDMEMBER\r\n$5\r\nmyset\r\n$1\r\n3\r\n";
+
+  test_command_serialization
+    "srandmember with negative count"
+    (fun () -> srandmember "myset" ~count:(-2) ())
+    "*3\r\n$11\r\nSRANDMEMBER\r\n$5\r\nmyset\r\n$2\r\n-2\r\n";
+
+  test_command_serialization
+    "spop without count"
+    (fun () -> spop "myset" ())
+    "*2\r\n$4\r\nSPOP\r\n$5\r\nmyset\r\n";
+
+  test_command_serialization
+    "spop with count"
+    (fun () -> spop "myset" ~count:5 ())
+    "*3\r\n$4\r\nSPOP\r\n$5\r\nmyset\r\n$1\r\n5\r\n";
+
+  test_command_serialization
+    "smove command"
+    (fun () -> smove "source" "dest" "member")
+    "*4\r\n$5\r\nSMOVE\r\n$6\r\nsource\r\n$4\r\ndest\r\n$6\r\nmember\r\n";
+
+  test_command_serialization
+    "sinterstore command"
+    (fun () -> sinterstore "result" ["set1"; "set2"; "set3"])
+    "*5\r\n$11\r\nSINTERSTORE\r\n$6\r\nresult\r\n$4\r\nset1\r\n$4\r\nset2\r\n$4\r\nset3\r\n";
+
+  test_command_serialization
+    "sunion command"
+    (fun () -> sunion ["set1"; "set2"])
+    "*3\r\n$6\r\nSUNION\r\n$4\r\nset1\r\n$4\r\nset2\r\n";
+
+  test_command_serialization
+    "sunionstore command"
+    (fun () -> sunionstore "result" ["set1"; "set2"])
+    "*4\r\n$11\r\nSUNIONSTORE\r\n$6\r\nresult\r\n$4\r\nset1\r\n$4\r\nset2\r\n";
+
+  test_command_serialization
+    "sdiff command"
+    (fun () -> sdiff ["set1"; "set2"; "set3"])
+    "*4\r\n$5\r\nSDIFF\r\n$4\r\nset1\r\n$4\r\nset2\r\n$4\r\nset3\r\n";
+
+  test_command_serialization
+    "sdiffstore command"
+    (fun () -> sdiffstore "result" ["set1"; "set2"])
+    "*4\r\n$10\r\nSDIFFSTORE\r\n$6\r\nresult\r\n$4\r\nset1\r\n$4\r\nset2\r\n";
+
+  test_command_serialization
+    "sscan command basic"
+    (fun () -> sscan "myset" 0 ())
+    "*3\r\n$5\r\nSSCAN\r\n$5\r\nmyset\r\n$1\r\n0\r\n";
+
+  test_command_serialization
+    "sscan command with match"
+    (fun () -> sscan "myset" 0 ~pattern:"prefix*" ())
+    "*5\r\n$5\r\nSSCAN\r\n$5\r\nmyset\r\n$1\r\n0\r\n$5\r\nMATCH\r\n$7\r\nprefix*\r\n";
+
+  test_command_serialization
+    "sscan command with count"
+    (fun () -> sscan "myset" 0 ~count:10 ())
+    "*5\r\n$5\r\nSSCAN\r\n$5\r\nmyset\r\n$1\r\n0\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n";
+
+  test_command_serialization
+    "sscan command with match and count"
+    (fun () -> sscan "myset" 42 ~pattern:"item:*" ~count:20 ())
+    "*7\r\n$5\r\nSSCAN\r\n$5\r\nmyset\r\n$2\r\n42\r\n$5\r\nMATCH\r\n$6\r\nitem:*\r\n$5\r\nCOUNT\r\n$2\r\n20\r\n";
+
+  (* Test round-trip serialization for set commands *)
+  test_command_roundtrip
+    "sadd roundtrip"
+    (fun () -> sadd "myset" ["member1"; "member2"; "member3"])
+    (sadd "myset" ["member1"; "member2"; "member3"]);
+
+  test_command_roundtrip
+    "srem roundtrip"
+    (fun () -> srem "myset" ["member1"; "member2"])
+    (srem "myset" ["member1"; "member2"]);
+
+  test_command_roundtrip
+    "scard roundtrip"
+    (fun () -> scard "myset")
+    (scard "myset");
+
+  test_command_roundtrip
+    "sismember roundtrip"
+    (fun () -> sismember "myset" "member")
+    (sismember "myset" "member");
+
+  test_command_roundtrip
+    "smembers roundtrip"
+    (fun () -> smembers "myset")
+    (smembers "myset");
+
+  test_command_roundtrip
+    "srandmember with count roundtrip"
+    (fun () -> srandmember "myset" ~count:5 ())
+    (srandmember "myset" ~count:5 ());
+
+  test_command_roundtrip
+    "spop with count roundtrip"
+    (fun () -> spop "myset" ~count:3 ())
+    (spop "myset" ~count:3 ());
+
+  test_command_roundtrip
+    "smove roundtrip"
+    (fun () -> smove "source_set" "dest_set" "element")
+    (smove "source_set" "dest_set" "element");
+
+  test_command_roundtrip
+    "sinter roundtrip"
+    (fun () -> sinter ["set1"; "set2"; "set3"])
+    (sinter ["set1"; "set2"; "set3"]);
+
+  test_command_roundtrip
+    "sinterstore roundtrip"
+    (fun () -> sinterstore "result_set" ["set1"; "set2"])
+    (sinterstore "result_set" ["set1"; "set2"]);
+
+  test_command_roundtrip
+    "sunion roundtrip"
+    (fun () -> sunion ["set1"; "set2"])
+    (sunion ["set1"; "set2"]);
+
+  test_command_roundtrip
+    "sunionstore roundtrip"
+    (fun () -> sunionstore "union_result" ["set1"; "set2"; "set3"])
+    (sunionstore "union_result" ["set1"; "set2"; "set3"]);
+
+  test_command_roundtrip
+    "sdiff roundtrip"
+    (fun () -> sdiff ["set1"; "set2"])
+    (sdiff ["set1"; "set2"]);
+
+  test_command_roundtrip
+    "sdiffstore roundtrip"
+    (fun () -> sdiffstore "diff_result" ["set1"; "set2"])
+    (sdiffstore "diff_result" ["set1"; "set2"]);
+
+  test_command_roundtrip
+    "sscan with options roundtrip"
+    (fun () -> sscan "large_set" 100 ~pattern:"user:*" ~count:50 ())
+    (sscan "large_set" 100 ~pattern:"user:*" ~count:50 ());
 ]
 
 (* Sorted Set Commands *)

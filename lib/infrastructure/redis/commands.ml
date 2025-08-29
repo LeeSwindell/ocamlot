@@ -417,19 +417,25 @@ let smembers key =
   Array (Some [BulkString (Some "SMEMBERS"); BulkString (Some key)])
 
 (** SRANDMEMBER key [count] - Get random set member(s) *)
-let srandmember _key ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let srandmember key ?count () =
+  let base_cmd = [BulkString (Some "SRANDMEMBER"); BulkString (Some key)] in
+  let final_cmd = match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some (string_of_int c))] in
+  Array (Some final_cmd)
 
 (** SPOP key [count] - Pop random set member(s) *)
-let spop _key ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let spop key ?count () =
+  let base_cmd = [BulkString (Some "SPOP"); BulkString (Some key)] in
+  let final_cmd = match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some (string_of_int c))] in
+  Array (Some final_cmd)
 
 (** SMOVE source destination member - Move set member *)
-let smove _source _destination _member =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let smove source destination member =
+  Array (Some [BulkString (Some "SMOVE"); BulkString (Some source); 
+               BulkString (Some destination); BulkString (Some member)])
 
 (** SINTER key [key ...] - Set intersection *)
 let sinter keys =
@@ -437,34 +443,40 @@ let sinter keys =
   Array (Some (BulkString (Some "SINTER") :: key_args))
 
 (** SINTERSTORE destination key [key ...] - Store set intersection *)
-let sinterstore _destination _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sinterstore destination keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "SINTERSTORE") :: BulkString (Some destination) :: key_args))
 
 (** SUNION key [key ...] - Set union *)
-let sunion _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sunion keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "SUNION") :: key_args))
 
 (** SUNIONSTORE destination key [key ...] - Store set union *)
-let sunionstore _destination _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sunionstore destination keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "SUNIONSTORE") :: BulkString (Some destination) :: key_args))
 
 (** SDIFF key [key ...] - Set difference *)
-let sdiff _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sdiff keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "SDIFF") :: key_args))
 
 (** SDIFFSTORE destination key [key ...] - Store set difference *)
-let sdiffstore _destination _keys =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sdiffstore destination keys =
+  let key_args = List.map (fun k -> BulkString (Some k)) keys in
+  Array (Some (BulkString (Some "SDIFFSTORE") :: BulkString (Some destination) :: key_args))
 
 (** SSCAN key cursor [MATCH pattern] [COUNT count] - Scan set members *)
-let sscan _key _cursor ?pattern:_pattern ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let sscan key cursor ?pattern ?count () =
+  let base_cmd = [BulkString (Some "SSCAN"); BulkString (Some key); BulkString (Some (string_of_int cursor))] in
+  let cmd_with_match = match pattern with
+    | None -> base_cmd
+    | Some p -> base_cmd @ [BulkString (Some "MATCH"); BulkString (Some p)] in
+  let final_cmd = match count with
+    | None -> cmd_with_match
+    | Some c -> cmd_with_match @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))] in
+  Array (Some final_cmd)
 
 (* =============================================================================
    SORTED SET COMMANDS
