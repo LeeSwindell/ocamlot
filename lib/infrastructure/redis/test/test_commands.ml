@@ -640,8 +640,7 @@ let string_command_tests = [
     
   test_command_serialization
     "mset multiple key-values"
-    (fun () -> Array (Some [BulkString (Some "MSET"); BulkString (Some "key1"); BulkString (Some "val1"); 
-                           BulkString (Some "key2"); BulkString (Some "val2")]))
+    (fun () -> mset [("key1", "val1"); ("key2", "val2")])
     "*5\r\n$4\r\nMSET\r\n$4\r\nkey1\r\n$4\r\nval1\r\n$4\r\nkey2\r\n$4\r\nval2\r\n";
     
   test_command_serialization
@@ -663,6 +662,138 @@ let string_command_tests = [
     "strlen command"
     (fun () -> strlen "mykey")
     "*2\r\n$6\r\nSTRLEN\r\n$5\r\nmykey\r\n";
+
+  (* Additional string commands *)
+  test_command_serialization
+    "set with expiration (EX)"
+    (fun () -> set "mykey" "myvalue" ~ex:3600 ())
+    "*5\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n$2\r\nEX\r\n$4\r\n3600\r\n";
+
+  test_command_serialization
+    "set with expiration (PX)"
+    (fun () -> set "mykey" "myvalue" ~px:60000 ())
+    "*5\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n$2\r\nPX\r\n$5\r\n60000\r\n";
+
+  test_command_serialization
+    "set with NX flag"
+    (fun () -> set "mykey" "myvalue" ~nx:true ())
+    "*4\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n$2\r\nNX\r\n";
+
+  test_command_serialization
+    "set with XX flag"
+    (fun () -> set "mykey" "myvalue" ~xx:true ())
+    "*4\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n$2\r\nXX\r\n";
+
+  test_command_serialization
+    "set with all options"
+    (fun () -> set "mykey" "myvalue" ~ex:3600 ~nx:true ())
+    "*6\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n$2\r\nEX\r\n$4\r\n3600\r\n$2\r\nNX\r\n";
+
+  test_command_serialization
+    "msetnx command"
+    (fun () -> msetnx [("key1", "val1"); ("key2", "val2")])
+    "*5\r\n$6\r\nMSETNX\r\n$4\r\nkey1\r\n$4\r\nval1\r\n$4\r\nkey2\r\n$4\r\nval2\r\n";
+
+  test_command_serialization
+    "getset command"
+    (fun () -> getset "mykey" "newvalue")
+    "*3\r\n$6\r\nGETSET\r\n$5\r\nmykey\r\n$8\r\nnewvalue\r\n";
+
+  test_command_serialization
+    "setnx command"
+    (fun () -> setnx "mykey" "myvalue")
+    "*3\r\n$5\r\nSETNX\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n";
+
+  test_command_serialization
+    "setex command"
+    (fun () -> setex "mykey" 3600 "myvalue")
+    "*4\r\n$5\r\nSETEX\r\n$5\r\nmykey\r\n$4\r\n3600\r\n$7\r\nmyvalue\r\n";
+
+  test_command_serialization
+    "psetex command"
+    (fun () -> psetex "mykey" 60000 "myvalue")
+    "*4\r\n$6\r\nPSETEX\r\n$5\r\nmykey\r\n$5\r\n60000\r\n$7\r\nmyvalue\r\n";
+
+  test_command_serialization
+    "incrbyfloat command"
+    (fun () -> incrbyfloat "mykey" 3.14)
+    "*3\r\n$11\r\nINCRBYFLOAT\r\n$5\r\nmykey\r\n$4\r\n3.14\r\n";
+
+  test_command_serialization
+    "decrby command"
+    (fun () -> decrby "mycounter" 5)
+    "*3\r\n$6\r\nDECRBY\r\n$9\r\nmycounter\r\n$1\r\n5\r\n";
+
+  test_command_serialization
+    "getrange command"
+    (fun () -> getrange "mykey" 0 4)
+    "*4\r\n$8\r\nGETRANGE\r\n$5\r\nmykey\r\n$1\r\n0\r\n$1\r\n4\r\n";
+
+  test_command_serialization
+    "setrange command"
+    (fun () -> setrange "mykey" 6 "world")
+    "*4\r\n$8\r\nSETRANGE\r\n$5\r\nmykey\r\n$1\r\n6\r\n$5\r\nworld\r\n";
+
+  (* Test round-trip serialization for string commands *)
+  test_command_roundtrip
+    "mget roundtrip"
+    (fun () -> mget ["key1"; "key2"; "key3"])
+    (mget ["key1"; "key2"; "key3"]);
+
+  test_command_roundtrip
+    "mset roundtrip"
+    (fun () -> mset [("key1", "val1"); ("key2", "val2")])
+    (mset [("key1", "val1"); ("key2", "val2")]);
+
+  test_command_roundtrip
+    "set with options roundtrip"
+    (fun () -> set "mykey" "myvalue" ~ex:3600 ~nx:true ())
+    (set "mykey" "myvalue" ~ex:3600 ~nx:true ());
+
+  test_command_roundtrip
+    "msetnx roundtrip"
+    (fun () -> msetnx [("key1", "val1"); ("key2", "val2")])
+    (msetnx [("key1", "val1"); ("key2", "val2")]);
+
+  test_command_roundtrip
+    "getset roundtrip"
+    (fun () -> getset "mykey" "newvalue")
+    (getset "mykey" "newvalue");
+
+  test_command_roundtrip
+    "setnx roundtrip"
+    (fun () -> setnx "mykey" "myvalue")
+    (setnx "mykey" "myvalue");
+
+  test_command_roundtrip
+    "setex roundtrip"
+    (fun () -> setex "mykey" 3600 "myvalue")
+    (setex "mykey" 3600 "myvalue");
+
+  test_command_roundtrip
+    "psetex roundtrip"
+    (fun () -> psetex "mykey" 60000 "myvalue")
+    (psetex "mykey" 60000 "myvalue");
+
+  test_command_roundtrip
+    "incrbyfloat roundtrip"
+    (fun () -> incrbyfloat "mykey" 2.718)
+    (incrbyfloat "mykey" 2.718);
+
+  test_command_roundtrip
+    "decrby roundtrip"
+    (fun () -> decrby "mycounter" 10)
+    (decrby "mycounter" 10);
+
+  test_command_roundtrip
+    "getrange roundtrip"
+    (fun () -> getrange "mykey" 5 10)
+    (getrange "mykey" 5 10);
+
+  test_command_roundtrip
+    "setrange roundtrip"
+    (fun () -> setrange "mykey" 3 "hello")
+    (setrange "mykey" 3 "hello");
 ]
 
 (* Hash Commands (beyond HGET/HSET) *)

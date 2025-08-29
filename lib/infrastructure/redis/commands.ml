@@ -122,10 +122,21 @@ let get key =
   Array (Some [BulkString (Some "GET"); BulkString (Some key)])
 
 (** SET key value [EX seconds] [PX milliseconds] [NX|XX] - Set string value *)
-let set key value ?ex:_ex ?px:_px ?nx:_nx ?xx:_xx () =
+let set key value ?ex ?px ?nx ?xx () =
   let base_cmd = [BulkString (Some "SET"); BulkString (Some key); BulkString (Some value)] in
-  let cmd = base_cmd in (* TODO: Add optional parameters *)
-  Array (Some cmd)
+  let cmd_with_ex = match ex with
+    | None -> base_cmd
+    | Some seconds -> base_cmd @ [BulkString (Some "EX"); BulkString (Some (string_of_int seconds))] in
+  let cmd_with_px = match px with
+    | None -> cmd_with_ex
+    | Some milliseconds -> cmd_with_ex @ [BulkString (Some "PX"); BulkString (Some (string_of_int milliseconds))] in
+  let cmd_with_nx = match nx with
+    | Some true -> cmd_with_px @ [BulkString (Some "NX")]
+    | _ -> cmd_with_px in
+  let final_cmd = match xx with
+    | Some true -> cmd_with_nx @ [BulkString (Some "XX")]
+    | _ -> cmd_with_nx in
+  Array (Some final_cmd)
 
 (** MGET key [key ...] - Get multiple values *)
 let mget keys =
@@ -139,29 +150,28 @@ let mset key_values =
   Array (Some (BulkString (Some "MSET") :: args))
 
 (** MSETNX key value [key value ...] - Set multiple if none exist *)
-let msetnx _key_values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let msetnx key_values =
+  let args = List.fold_right (fun (key, value) acc ->
+    BulkString (Some key) :: BulkString (Some value) :: acc) key_values [] in
+  Array (Some (BulkString (Some "MSETNX") :: args))
 
 (** GETSET key value - Set and return old value *)
-let getset _key _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let getset key value =
+  Array (Some [BulkString (Some "GETSET"); BulkString (Some key); BulkString (Some value)])
 
 (** SETNX key value - Set if not exists *)
-let setnx _key _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let setnx key value =
+  Array (Some [BulkString (Some "SETNX"); BulkString (Some key); BulkString (Some value)])
 
 (** SETEX key seconds value - Set with expiration *)
-let setex _key _seconds _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let setex key seconds value =
+  Array (Some [BulkString (Some "SETEX"); BulkString (Some key); 
+               BulkString (Some (string_of_int seconds)); BulkString (Some value)])
 
 (** PSETEX key milliseconds value - Set with expiration in milliseconds *)
-let psetex _key _milliseconds _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let psetex key milliseconds value =
+  Array (Some [BulkString (Some "PSETEX"); BulkString (Some key); 
+               BulkString (Some (string_of_int milliseconds)); BulkString (Some value)])
 
 (** INCR key - Increment integer value *)
 let incr key =
@@ -172,18 +182,18 @@ let incrby key increment =
   Array (Some [BulkString (Some "INCRBY"); BulkString (Some key); BulkString (Some (string_of_int increment))])
 
 (** INCRBYFLOAT key increment - Increment by float *)
-let incrbyfloat _key _increment =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let incrbyfloat key increment =
+  Array (Some [BulkString (Some "INCRBYFLOAT"); BulkString (Some key); 
+               BulkString (Some (string_of_float increment))])
 
 (** DECR key - Decrement integer value *)
 let decr key =
   Array (Some [BulkString (Some "DECR"); BulkString (Some key)])
 
 (** DECRBY key decrement - Decrement by amount *)
-let decrby _key _decrement =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let decrby key decrement =
+  Array (Some [BulkString (Some "DECRBY"); BulkString (Some key); 
+               BulkString (Some (string_of_int decrement))])
 
 (** APPEND key value - Append to string *)
 let append key value =
@@ -194,14 +204,14 @@ let strlen key =
   Array (Some [BulkString (Some "STRLEN"); BulkString (Some key)])
 
 (** GETRANGE key start end - Get substring *)
-let getrange _key _start_pos _end_pos =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let getrange key start_pos end_pos =
+  Array (Some [BulkString (Some "GETRANGE"); BulkString (Some key); 
+               BulkString (Some (string_of_int start_pos)); BulkString (Some (string_of_int end_pos))])
 
 (** SETRANGE key offset value - Overwrite string at offset *)
-let setrange _key _offset _value =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let setrange key offset value =
+  Array (Some [BulkString (Some "SETRANGE"); BulkString (Some key); 
+               BulkString (Some (string_of_int offset)); BulkString (Some value)])
 
 (* =============================================================================
    HASH COMMANDS
