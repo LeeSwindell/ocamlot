@@ -266,6 +266,7 @@ Dockerfile.local
 config/local.json
 data/
 logs/
+web/static/
 
 # NATS server files (if running locally)
 nats-server.pid

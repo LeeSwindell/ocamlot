@@ -2305,7 +2305,64 @@ let stream_command_tests =
       
   ; test_command_roundtrip "xread multiple streams roundtrip"
       (fun () -> xread ~count:5 ~block:2000 [{key="s1"; id="1-0"}; {key="s2"; id="$"}])
-      (xread ~count:5 ~block:2000 [{key="s1"; id="1-0"}; {key="s2"; id="$"}]) ]
+      (xread ~count:5 ~block:2000 [{key="s1"; id="1-0"}; {key="s2"; id="$"}])
+      
+  (* XREADGROUP tests *)
+  ; test_command_serialization "xreadgroup basic"
+      (fun () -> xreadgroup "mygroup" "consumer1" [{key="mystream"; id=">"}])
+      "*7\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup with pending messages"
+      (fun () -> xreadgroup "mygroup" "consumer1" [{key="mystream"; id="0-0"}])
+      "*7\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$3\r\n0-0\r\n"
+  
+  ; test_command_serialization "xreadgroup with COUNT"
+      (fun () -> xreadgroup "testgroup" "alice" ~count:5 [{key="events"; id=">"}])
+      "*9\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$9\r\ntestgroup\r\n$5\r\nalice\r\n$5\r\nCOUNT\r\n$1\r\n5\r\n$7\r\nSTREAMS\r\n$6\r\nevents\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup with BLOCK"
+      (fun () -> xreadgroup "mygroup" "worker1" ~block:2000 [{key="jobs"; id=">"}])
+      "*9\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$7\r\nmygroup\r\n$7\r\nworker1\r\n$5\r\nBLOCK\r\n$4\r\n2000\r\n$7\r\nSTREAMS\r\n$4\r\njobs\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup with NOACK"
+      (fun () -> xreadgroup "fastgroup" "speedy" ~noack:true [{key="logs"; id=">"}])
+      "*8\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$9\r\nfastgroup\r\n$6\r\nspeedy\r\n$5\r\nNOACK\r\n$7\r\nSTREAMS\r\n$4\r\nlogs\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup with all options"
+      (fun () -> xreadgroup "group" "consumer" ~count:10 ~block:1000 ~noack:true [{key="stream"; id=">"}])
+      "*12\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$5\r\ngroup\r\n$8\r\nconsumer\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$5\r\nNOACK\r\n$7\r\nSTREAMS\r\n$6\r\nstream\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup multiple streams"
+      (fun () -> xreadgroup "workers" "w1" [{key="tasks"; id=">"}; {key="alerts"; id="0"}])
+      "*9\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$7\r\nworkers\r\n$2\r\nw1\r\n$7\r\nSTREAMS\r\n$5\r\ntasks\r\n$6\r\nalerts\r\n$1\r\n>\r\n$1\r\n0\r\n"
+  
+  ; test_command_serialization "xreadgroup with specific timestamp ID"
+      (fun () -> xreadgroup "mygroup" "processor" [{key="events"; id="1526985054069-0"}])
+      "*7\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$7\r\nmygroup\r\n$9\r\nprocessor\r\n$7\r\nSTREAMS\r\n$6\r\nevents\r\n$15\r\n1526985054069-0\r\n"
+  
+  ; test_command_serialization "xreadgroup with incomplete timestamp ID"
+      (fun () -> xreadgroup "group1" "c1" [{key="stream1"; id="1526985054069"}])
+      "*7\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$6\r\ngroup1\r\n$2\r\nc1\r\n$7\r\nSTREAMS\r\n$7\r\nstream1\r\n$13\r\n1526985054069\r\n"
+  
+  ; test_command_serialization "xreadgroup zero blocking (infinite wait)"
+      (fun () -> xreadgroup "blockgroup" "waiter" ~block:0 [{key="stream"; id=">"}])
+      "*9\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$10\r\nblockgroup\r\n$6\r\nwaiter\r\n$5\r\nBLOCK\r\n$1\r\n0\r\n$7\r\nSTREAMS\r\n$6\r\nstream\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup with special consumer group name"
+      (fun () -> xreadgroup "my:group-name_123" "consumer.1" [{key="test"; id=">"}])
+      "*7\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$17\r\nmy:group-name_123\r\n$10\r\nconsumer.1\r\n$7\r\nSTREAMS\r\n$4\r\ntest\r\n$1\r\n>\r\n"
+  
+  ; test_command_serialization "xreadgroup COUNT 1 optimization"
+      (fun () -> xreadgroup "optimized" "reader" ~count:1 [{key="fast"; id=">"}])
+      "*9\r\n$10\r\nXREADGROUP\r\n$5\r\nGROUP\r\n$9\r\noptimized\r\n$6\r\nreader\r\n$5\r\nCOUNT\r\n$1\r\n1\r\n$7\r\nSTREAMS\r\n$4\r\nfast\r\n$1\r\n>\r\n"
+  
+  ; test_command_roundtrip "xreadgroup basic roundtrip"
+      (fun () -> xreadgroup "mygroup" "consumer1" [{key="mystream"; id=">"}])
+      (xreadgroup "mygroup" "consumer1" [{key="mystream"; id=">"}])
+      
+  ; test_command_roundtrip "xreadgroup all options roundtrip"
+      (fun () -> xreadgroup "group" "consumer" ~count:5 ~block:1000 ~noack:true [{key="stream1"; id=">"}; {key="stream2"; id="0"}])
+      (xreadgroup "group" "consumer" ~count:5 ~block:1000 ~noack:true [{key="stream1"; id=">"}; {key="stream2"; id="0"}]) ]
 
 (* Pub/Sub Commands *)
 let pubsub_command_tests =

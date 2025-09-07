@@ -187,6 +187,54 @@ let test_xread_continuation streams expected_new_entries state =
         expected_new_entries (List.fold_left (fun acc (_, entries) -> acc + List.length entries) 0 xread_result) ;
       return_ok () state
 
+(* XREADGROUP-specific pipeline functions *)
+let create_consumer_group group_name stream_name start_id state =
+  (* Create consumer group using raw command since XGROUP CREATE client wrapper not implemented *)
+  let xgroup_cmd = Ocamlot_infrastructure_redis.Commands.xgroup_create stream_name group_name start_id () in
+  let* result = Client.execute state.client xgroup_cmd in
+  match result with
+  | Error e -> Lwt.return (Error e)  
+  | Ok _ -> return_ok () state
+
+let test_xreadgroup_empty group consumer streams expected_result state =
+  let* result = Client.xreadgroup state.client group consumer streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      check (list (pair string (list (pair string (list (pair string string))))))
+        ("XREADGROUP " ^ group ^ "/" ^ consumer ^ " should return empty") expected_result xread_result ;
+      return_ok () state
+
+let test_xreadgroup_basic group consumer streams expected_stream_count state =
+  let* result = Client.xreadgroup state.client group consumer streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      check int ("XREADGROUP should return " ^ string_of_int expected_stream_count ^ " streams") 
+        expected_stream_count (List.length xread_result) ;
+      return_ok () state
+
+let test_xreadgroup_with_count group consumer streams count expected_entry_count state =
+  let* result = Client.xreadgroup state.client group consumer ~count streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      (match xread_result with
+       | (_, entries) :: _ ->
+           check int ("XREADGROUP with COUNT " ^ string_of_int count) 
+             expected_entry_count (List.length entries) ;
+           return_ok () state
+       | [] -> return_ok () state)
+
+let test_xreadgroup_noack group consumer streams expected_stream_count state =
+  let* result = Client.xreadgroup state.client group consumer ~noack:true streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      check int ("XREADGROUP with NOACK should return " ^ string_of_int expected_stream_count ^ " streams")
+        expected_stream_count (List.length xread_result) ;
+      return_ok () state
+
 let test_config =
   { Client.host= "127.0.0.1"
   ; port= 6379
@@ -395,6 +443,47 @@ let test_xread_operations_new _switch () =
   | Error e ->
       fail (Printf.sprintf "XREAD operations failed: %s" (show_client_error e))
 
+let test_xreadgroup_operations _switch () =
+  let* result = Client.with_client test_config (fun client ->
+      run_test_pipeline client [
+        (* Setup streams and consumer group *)
+        (fun state -> setup_multiple_streams ["xrg_stream1"; "xrg_stream2"] state);
+        (fun state -> add_xread_entry "xrg_stream1" [("event", "start"); ("user", "alice")] state);
+        (fun state -> add_xread_entry "xrg_stream2" [("event", "click"); ("page", "home")] state);
+        (fun state -> create_consumer_group "testgroup" "xrg_stream1" "0" state);
+        (fun state -> create_consumer_group "testgroup" "xrg_stream2" "0" state);
+        
+        (* Test XREADGROUP with > ID (new messages) *)
+        (fun state -> test_xreadgroup_basic "testgroup" "consumer1" [Client.{key="xrg_stream1"; id=">"}] 1 state);
+        
+        (* Add more entries for testing multiple streams *)
+        (fun state -> add_xread_entry "xrg_stream1" [("event", "update"); ("status", "ok")] state);
+        (fun state -> add_xread_entry "xrg_stream2" [("event", "scroll"); ("page", "about")] state);
+        
+        (* Test XREADGROUP with multiple streams (should get new messages from both) *)
+        (fun state -> test_xreadgroup_basic "testgroup" "consumer2" [Client.{key="xrg_stream1"; id=">"}; Client.{key="xrg_stream2"; id=">"}] 2 state);
+        
+        (* Add more entries and test COUNT *)
+        (fun state -> add_xread_entry "xrg_stream1" [("event", "finish"); ("status", "complete")] state);
+        (fun state -> test_xreadgroup_with_count "testgroup" "consumer3" [Client.{key="xrg_stream1"; id=">"}] 1 1 state);
+        
+        (* Test XREADGROUP with NOACK (add new message first) *)
+        (fun state -> add_xread_entry "xrg_stream1" [("event", "noack_test"); ("type", "fire_and_forget")] state);
+        (fun state -> test_xreadgroup_noack "testgroup" "consumer4" [Client.{key="xrg_stream1"; id=">"}] 1 state);
+        
+        (* Test reading pending messages with specific ID (0-0) - consumer1 should have pending messages *)
+        (fun state -> test_xreadgroup_basic "testgroup" "consumer1" [Client.{key="xrg_stream1"; id="0-0"}] 1 state);
+        
+        (* Cleanup *)
+        (fun state -> cleanup_stream "xrg_stream1" state);
+        (fun state -> cleanup_stream "xrg_stream2" state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XREADGROUP operations failed: %s" (show_client_error e))
+
 (* =============================================================================
    CONDITIONAL TEST SUITE DEFINITION
    ============================================================================= *)
@@ -455,12 +544,16 @@ let integration_info_tests =
 let integration_stream_tests =
   if check_redis_available () then
     [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations;
-     test_case "xread operations" `Quick test_xread_operations_new]
+     test_case "xread operations" `Quick test_xread_operations_new;
+     test_case "xreadgroup operations" `Quick test_xreadgroup_operations]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xread operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xreadgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 

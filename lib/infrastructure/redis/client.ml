@@ -365,3 +365,20 @@ let xread client ?count ?block streams =
         (Error
            (Parse_error
               ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
+let xreadgroup client group_name consumer ?count ?block ?noack streams =
+  let commands_streams = List.map (fun {key; id} -> Commands.{key; id}) streams in
+  let command = Commands.xreadgroup group_name consumer ?count ?block ?noack commands_streams in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some stream_responses)) ->
+      (match parse_xread_response stream_responses with
+       | Ok parsed_streams -> Lwt.return (Ok parsed_streams)
+       | Error msg -> Lwt.return (Error (Parse_error msg)))
+  | Ok (Resp3.Array None) -> Lwt.return (Ok []) (* Timeout or no data *)
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )

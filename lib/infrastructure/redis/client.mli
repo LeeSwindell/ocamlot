@@ -86,6 +86,16 @@ val xread : t -> ?count:int -> ?block:int -> xread_stream list -> (xread_result,
     - streams: list of {key; id} where id is last seen ID ("$" for new only, "0-0" for all)
     Returns [(stream_name, entries)] for streams with new data *)
 
+val xreadgroup : t -> string -> string -> ?count:int -> ?block:int -> ?noack:bool -> xread_stream list -> (xread_result, client_error) result Lwt.t
+(** Read from multiple streams using consumer groups.
+    - group_name: consumer group name
+    - consumer: consumer name within group
+    - count: max entries per stream
+    - block: timeout in milliseconds (0 = infinite)
+    - noack: if true, don't add messages to PEL (no acknowledgment needed)
+    - streams: list of {key; id} where id is ">" for new messages or specific ID for pending
+    Returns [(stream_name, entries)] for streams with new data delivered to this consumer *)
+
 (** {1 Low-level Operations} *)
 
 val execute :

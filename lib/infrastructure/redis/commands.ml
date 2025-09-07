@@ -1197,15 +1197,63 @@ let xread ?count ?block streams =
   let final_cmd = cmd_with_block @ streams_section in
   Array (Some final_cmd)
 
-(** XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] ID [ID ...] - Read from stream group *)
-let xreadgroup _group_name _consumer ?count:_count ?block:_block _streams =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+(** XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] [NOACK] STREAMS key [key ...] ID [ID ...] - Read from stream group *)
+let xreadgroup group_name consumer ?count ?block ?noack streams =
+  (* Extract keys and IDs from streams *)
+  let keys = List.map (fun s -> s.key) streams in
+  let ids = List.map (fun s -> s.id) streams in
+  
+  (* Build command starting with XREADGROUP GROUP group consumer *)
+  let base_cmd = 
+    [BulkString (Some "XREADGROUP"); 
+     BulkString (Some "GROUP"); 
+     BulkString (Some group_name);
+     BulkString (Some consumer)] in
+  
+  (* Add COUNT if specified *)
+  let cmd_with_count = 
+    match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))]
+  in
+  
+  (* Add BLOCK if specified (in milliseconds) *)
+  let cmd_with_block = 
+    match block with  
+    | None -> cmd_with_count
+    | Some ms -> cmd_with_count @ [BulkString (Some "BLOCK"); BulkString (Some (string_of_int ms))]
+  in
+  
+  (* Add NOACK if specified *)
+  let cmd_with_noack = 
+    match noack with
+    | Some true -> cmd_with_block @ [BulkString (Some "NOACK")]
+    | _ -> cmd_with_block
+  in
+  
+  (* Add STREAMS keyword followed by keys, then IDs *)
+  let streams_section = BulkString (Some "STREAMS") 
+    :: (List.map (fun k -> BulkString (Some k)) keys)
+    @ (List.map (fun id -> BulkString (Some id)) ids)
+  in
+  
+  let final_cmd = cmd_with_noack @ streams_section in
+  Array (Some final_cmd)
 
 (** XGROUP CREATE key groupname id [MKSTREAM] - Create consumer group *)
-let xgroup_create _key _groupname _id ?mkstream:_mkstream () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xgroup_create key groupname id ?mkstream () =
+  let base_cmd = 
+    [BulkString (Some "XGROUP"); 
+     BulkString (Some "CREATE"); 
+     BulkString (Some key); 
+     BulkString (Some groupname);
+     BulkString (Some id)] in
+  let final_cmd = 
+    match mkstream with
+    | Some true -> base_cmd @ [BulkString (Some "MKSTREAM")]
+    | _ -> base_cmd
+  in
+  Array (Some final_cmd)
 
 (** XGROUP DESTROY key groupname - Destroy consumer group *)
 let xgroup_destroy _key _groupname =
