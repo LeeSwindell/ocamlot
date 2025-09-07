@@ -1132,9 +1132,18 @@ let xlen key =
   Array (Some [BulkString (Some "XLEN"); BulkString (Some key)])
 
 (** XRANGE key start end [COUNT count] - Get stream range *)
-let xrange _key _start_id _end_id ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xrange key start_id end_id ?count () =
+  let base_cmd = 
+    [BulkString (Some "XRANGE"); 
+     BulkString (Some key); 
+     BulkString (Some start_id); 
+     BulkString (Some end_id)] in
+  let final_cmd = 
+    match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))]
+  in
+  Array (Some final_cmd)
 
 (** XREVRANGE key end start [COUNT count] - Get stream range (reverse) *)
 let xrevrange _key _end_id _start_id ?count:_count () =

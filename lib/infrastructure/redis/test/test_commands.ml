@@ -2178,7 +2178,44 @@ let stream_command_tests =
   
   ; test_command_roundtrip "xlen command roundtrip"
       (fun () -> xlen "test-stream")
-      (xlen "test-stream") ]
+      (xlen "test-stream")
+  
+  (* XRANGE tests *)
+  ; test_command_serialization "xrange basic with - and +"
+      (fun () -> xrange "mystream" "-" "+" ())
+      "*4\r\n$6\r\nXRANGE\r\n$8\r\nmystream\r\n$1\r\n-\r\n$1\r\n+\r\n"
+  
+  ; test_command_serialization "xrange with specific IDs"
+      (fun () -> xrange "mystream" "1526985054069-0" "1526985055069-0" ())
+      "*4\r\n$6\r\nXRANGE\r\n$8\r\nmystream\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055069-0\r\n"
+  
+  ; test_command_serialization "xrange with COUNT"
+      (fun () -> xrange "mystream" "-" "+" ~count:10 ())
+      "*6\r\n$6\r\nXRANGE\r\n$8\r\nmystream\r\n$1\r\n-\r\n$1\r\n+\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n"
+  
+  ; test_command_serialization "xrange with incomplete ID"
+      (fun () -> xrange "mystream" "1526985054069" "1526985055069" ())
+      "*4\r\n$6\r\nXRANGE\r\n$8\r\nmystream\r\n$13\r\n1526985054069\r\n$13\r\n1526985055069\r\n"
+  
+  ; test_command_serialization "xrange with exclusive range"
+      (fun () -> xrange "mystream" "(1526985685298-0" "+" ~count:2 ())
+      "*6\r\n$6\r\nXRANGE\r\n$8\r\nmystream\r\n$16\r\n(1526985685298-0\r\n$1\r\n+\r\n$5\r\nCOUNT\r\n$1\r\n2\r\n"
+  
+  ; test_command_serialization "xrange single entry fetch"
+      (fun () -> xrange "mystream" "1526984818136-0" "1526984818136-0" ())
+      "*4\r\n$6\r\nXRANGE\r\n$8\r\nmystream\r\n$15\r\n1526984818136-0\r\n$15\r\n1526984818136-0\r\n"
+  
+  ; test_command_serialization "xrange with unicode key"
+      (fun () -> xrange "ストリーム" "-" "+" ~count:1 ())
+      "*6\r\n$6\r\nXRANGE\r\n$15\r\nストリーム\r\n$1\r\n-\r\n$1\r\n+\r\n$5\r\nCOUNT\r\n$1\r\n1\r\n"
+  
+  ; test_command_roundtrip "xrange command roundtrip"
+      (fun () -> xrange "test-stream" "-" "+" ())
+      (xrange "test-stream" "-" "+" ())
+      
+  ; test_command_roundtrip "xrange with count roundtrip"
+      (fun () -> xrange "test-stream" "1-0" "2-0" ~count:5 ())
+      (xrange "test-stream" "1-0" "2-0" ~count:5 ()) ]
 
 (* Pub/Sub Commands *)
 let pubsub_command_tests =

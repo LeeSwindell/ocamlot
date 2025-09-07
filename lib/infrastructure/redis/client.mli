@@ -56,8 +56,15 @@ val info : t -> (string, client_error) result Lwt.t
 
 (** {1 Stream Operations} *)
 
+(** Stream entry: (entry_id, [(field, value); ...]) *)
+type stream_entry = string * (string * string) list
+
 val xlen : t -> string -> (int, client_error) result Lwt.t
 (** Get the number of entries in a stream *)
+
+val xrange : t -> string -> string -> string -> ?count:int -> unit -> (stream_entry list, client_error) result Lwt.t
+(** Get stream entries in a range. Use "-" and "+" for min/max IDs. 
+    Returns list of (entry_id, field_value_pairs) *)
 
 (** {1 Low-level Operations} *)
 

@@ -271,3 +271,42 @@ let xlen client key =
         (Error
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
+
+(* Type for stream entries: (entry_id * (field * value) list) *)
+type stream_entry = string * (string * string) list
+
+(* Helper function to parse stream entries from RESP3 array *)
+let rec parse_stream_entries = function
+  | [] -> Ok []
+  | (Resp3.Array (Some [Resp3.BulkString (Some entry_id); Resp3.Array (Some field_values)])) :: rest ->
+      (match parse_field_values field_values [] with
+       | Ok fields ->
+           (match parse_stream_entries rest with
+            | Ok entries -> Ok ((entry_id, fields) :: entries)
+            | Error e -> Error e)
+       | Error e -> Error e)
+  | entry :: _ ->
+      Error ("Invalid stream entry format: " ^ Resp3.show_resp_value entry)
+
+and parse_field_values field_values acc =
+  match field_values with
+  | [] -> Ok (List.rev acc)
+  | (Resp3.BulkString (Some field)) :: (Resp3.BulkString (Some value)) :: rest ->
+      parse_field_values rest ((field, value) :: acc)
+  | _ -> Error "Invalid field-value pair format"
+
+let xrange client key start_id end_id ?count () =
+  let command = Commands.xrange key start_id end_id ?count () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some entries)) ->
+      (match parse_stream_entries entries with
+       | Ok parsed_entries -> Lwt.return (Ok parsed_entries)
+       | Error msg -> Lwt.return (Error (Parse_error msg)))
+  | Ok (Resp3.Array None) -> Lwt.return (Ok [])
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )

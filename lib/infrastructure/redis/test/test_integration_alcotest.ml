@@ -199,37 +199,62 @@ let test_stream_operations _switch () =
         | Ok count -> (
             check int_testable "XLEN on non-existent stream should return 0" 0
               count ;
-            (* Add entries to stream using raw execute since XADD client wrapper not implemented yet *)
-            let xadd_cmd1 =
-              Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream" "*"
-                [("field1", "value1")]
-                ()
-            in
-            let* add_result1 = Client.execute client xadd_cmd1 in
-            match add_result1 with
+            (* Test XRANGE on non-existent stream *)
+            let* xrange_empty_result = Client.xrange client "alcotest_stream" "-" "+" () in
+            match xrange_empty_result with
             | Error e -> Lwt.return (Error e)
-            | Ok _ -> (
-                (* Add another entry *)
-                let xadd_cmd2 =
-                  Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream"
-                    "*"
-                    [("field2", "value2")]
+            | Ok entries -> (
+                check (list (pair string (list (pair string string)))) "XRANGE on non-existent stream should return empty list" [] entries ;
+                (* Add entries to stream using raw execute since XADD client wrapper not implemented yet *)
+                let xadd_cmd1 =
+                  Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream" "*"
+                    [("field1", "value1"); ("field2", "value2")]
                     ()
                 in
-                let* add_result2 = Client.execute client xadd_cmd2 in
-                match add_result2 with
+                let* add_result1 = Client.execute client xadd_cmd1 in
+                match add_result1 with
                 | Error e -> Lwt.return (Error e)
                 | Ok _ -> (
-                    (* Test XLEN after adding entries *)
-                    let* xlen_result = Client.xlen client "alcotest_stream" in
-                    match xlen_result with
+                    (* Add another entry *)
+                    let xadd_cmd2 =
+                      Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream"
+                        "*"
+                        [("field3", "value3"); ("field4", "value4")]
+                        ()
+                    in
+                    let* add_result2 = Client.execute client xadd_cmd2 in
+                    match add_result2 with
                     | Error e -> Lwt.return (Error e)
-                    | Ok count ->
-                        check int_testable
-                          "XLEN after adding 2 entries should return 2" 2 count ;
-                        (* Clean up *)
-                        let* _ = Client.del client ["alcotest_stream"] in
-                        Lwt.return (Ok ()) ) ) ) )
+                    | Ok _ -> (
+                        (* Test XLEN after adding entries *)
+                        let* xlen_result = Client.xlen client "alcotest_stream" in
+                        match xlen_result with
+                        | Error e -> Lwt.return (Error e)
+                        | Ok count -> (
+                            check int_testable
+                              "XLEN after adding 2 entries should return 2" 2 count ;
+                            (* Test XRANGE to get all entries *)
+                            let* xrange_result = Client.xrange client "alcotest_stream" "-" "+" () in
+                            match xrange_result with
+                            | Error e -> Lwt.return (Error e)
+                            | Ok entries -> (
+                                check int_testable "XRANGE should return 2 entries" 2 (List.length entries) ;
+                                (* Verify the first entry has correct field-value pairs *)
+                                (match entries with
+                                 | (_, fields1) :: (_, fields2) :: _ ->
+                                     check int_testable "First entry should have 2 fields" 2 (List.length fields1) ;
+                                     check int_testable "Second entry should have 2 fields" 2 (List.length fields2) ;
+                                     (* Test XRANGE with COUNT *)
+                                     let* xrange_count_result = Client.xrange client "alcotest_stream" "-" "+" ~count:1 () in
+                                     (match xrange_count_result with
+                                      | Error e -> Lwt.return (Error e)
+                                      | Ok limited_entries ->
+                                          check int_testable "XRANGE with COUNT 1 should return 1 entry" 1 (List.length limited_entries) ;
+                                          (* Clean up *)
+                                          let* _ = Client.del client ["alcotest_stream"] in
+                                          Lwt.return (Ok ()))
+                                 | _ -> 
+                                     Lwt.return (Error (Client.Parse_error "Unexpected entries structure"))) ) ) ) ) ) ) )
   in
   match result with
   | Ok () -> Lwt.return_unit
@@ -296,7 +321,7 @@ let integration_info_tests =
 
 let integration_stream_tests =
   if check_redis_available () then
-    [test_case "stream operations (XLEN)" `Quick test_stream_operations]
+    [test_case "stream operations (XLEN, XRANGE)" `Quick test_stream_operations]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
