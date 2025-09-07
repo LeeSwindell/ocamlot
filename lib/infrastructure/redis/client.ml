@@ -422,6 +422,35 @@ let xack client key group_name ids =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XACKDEL operations *)
+let xackdel client key group_name ids ?ref_handling () =
+  let command = Commands.xackdel key group_name ids ?ref_handling () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some elements)) ->
+      let parse_element = function
+        | Resp3.Integer i -> Ok (Int64.to_int i)
+        | resp -> Error (Parse_error ("Expected Integer in array, got " ^ Resp3.show_resp_value resp))
+      in
+      (match List.fold_right (fun elem acc ->
+         match acc with
+         | Error e -> Error e
+         | Ok acc_list ->
+           match parse_element elem with
+           | Ok value -> Ok (value :: acc_list)  
+           | Error e -> Error e
+       ) elements (Ok []) with
+       | Ok result_list -> Lwt.return (Ok result_list)
+       | Error e -> Lwt.return (Error e))
+  | Ok (Resp3.Array None) ->
+      Lwt.return (Ok [])
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XPENDING operations *)
 
 (* Type for XPENDING summary: (count * min_id * max_id * consumers) *)

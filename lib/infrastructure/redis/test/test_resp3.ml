@@ -86,6 +86,7 @@ let () =
        ; ("commands: streams", sync_to_lwt stream_command_tests)
        ; ("commands: xgroup", sync_to_lwt xgroup_command_tests)
        ; ("commands: xack", sync_to_lwt xack_command_tests)
+       ; ("commands: xackdel", sync_to_lwt xackdel_command_tests)
        ; ("commands: xpending", sync_to_lwt xpending_command_tests)
        ; ("commands: xclaim", sync_to_lwt xclaim_command_tests)
        ; ("commands: xautoclaim", sync_to_lwt xautoclaim_command_tests)

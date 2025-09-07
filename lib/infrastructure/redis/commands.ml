@@ -1449,6 +1449,28 @@ let xdelex key ids ?(ref_handling=Keepref) () =
   
   Array (Some (cmd_with_ref @ ids_block))
 
+(** XACKDEL key group [KEEPREF | DELREF | ACKED] IDS numids id [id ...] - Acknowledge and conditionally delete entries *)
+let xackdel key group_name ids ?(ref_handling=Keepref) () =
+  let base_cmd = [BulkString (Some "XACKDEL"); BulkString (Some key); BulkString (Some group_name)] in
+  
+  (* Add reference handling option *)
+  let cmd_with_ref = 
+    base_cmd @
+    (match ref_handling with
+     | Keepref -> [BulkString (Some "KEEPREF")]
+     | Delref -> [BulkString (Some "DELREF")]
+     | Acked -> [BulkString (Some "ACKED")])
+  in
+  
+  (* Add IDS block *)
+  let numids = List.length ids in
+  let ids_block = 
+    [BulkString (Some "IDS"); BulkString (Some (string_of_int numids))] @
+    (List.map (fun id -> BulkString (Some id)) ids)
+  in
+  
+  Array (Some (cmd_with_ref @ ids_block))
+
 (* =============================================================================
    PUBSUB COMMANDS
    ============================================================================= *)

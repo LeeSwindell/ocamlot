@@ -120,6 +120,33 @@ val xack : t -> string -> string -> string list -> (int, client_error) result Lw
     - ids: list of entry IDs to acknowledge (e.g., ["1526985054069-0"; "1526985055000-1"])
     Returns the number of messages that were successfully acknowledged *)
 
+val xackdel : t -> string -> string -> string list -> ?ref_handling:Commands.xtrim_ref_handling -> unit -> (int list, client_error) result Lwt.t
+(** Acknowledge and conditionally delete entries from a stream in a single atomic operation.
+    
+    Usage: xackdel client "stream" "group" ["id1"; "id2"] ~ref_handling:Delref ()
+    
+    Parameters:
+    - key: stream name
+    - group_name: consumer group name
+    - ids: list of entry IDs to acknowledge and delete (e.g., ["1526985054069-0"; "1526985055000-1"])
+    - ref_handling: how to handle consumer group references (default: Keepref)
+      * Keepref (default): Acknowledge entries and delete from stream but preserve PEL references
+      * Delref: Acknowledge entries, delete from stream, and remove all PEL references across groups
+      * Acked: Acknowledge entries and only delete entries acknowledged by all consumer groups
+    
+    Returns a list of integers, one for each requested ID:
+    - 1: Entry was successfully acknowledged and deleted from the stream
+    - -1: ID does not exist in the stream (or stream doesn't exist)
+    - 2: Entry was acknowledged but not deleted due to dangling references (ACKED option only)
+    
+    This command combines XACK and XDEL functionality, providing atomic acknowledge-and-delete
+    operations with fine-grained control over consumer group reference handling.
+    
+    Examples:
+    - Basic ack+delete: xackdel client "stream" "group" ["id1"; "id2"] ()
+    - Clean ack+delete: xackdel client "stream" "group" ["id1"] ~ref_handling:Delref ()
+    - Multi-group safe: xackdel client "stream" "group" ["id1"] ~ref_handling:Acked () *)
+
 (** {1 XPENDING Operations} *)
 
 (** XPENDING summary information *)

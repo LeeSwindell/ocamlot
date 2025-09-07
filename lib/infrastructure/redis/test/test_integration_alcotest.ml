@@ -577,6 +577,102 @@ let test_xack_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XACK operations failed: %s" (show_client_error e))
 
+(* XACKDEL Pipeline Test Functions *)
+let test_xackdel_single_entry group_name stream_name entry_id expected_result ref_handling state =
+  let* result = Client.xackdel state.client stream_name group_name [entry_id] ~ref_handling () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok [actual_result] ->
+      if actual_result <> expected_result then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected result %d, got %d" expected_result actual_result)))
+      else
+        return_ok () state
+  | Ok results ->
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected single result, got %d results: [%s]" 
+          (List.length results) (String.concat "; " (List.map string_of_int results)))))
+
+let test_xackdel_multiple_entries group_name stream_name entry_ids expected_results ref_handling state =
+  let* result = Client.xackdel state.client stream_name group_name entry_ids ~ref_handling () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok actual_results ->
+      if actual_results <> expected_results then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected results [%s], got [%s]" 
+          (String.concat "; " (List.map string_of_int expected_results))
+          (String.concat "; " (List.map string_of_int actual_results)))))
+      else
+        return_ok () state
+
+let test_xackdel_operations _switch () =
+  let* result = Client.with_client test_config (fun client ->
+      let stream_name = "xackdel_test_stream_" ^ string_of_int (Random.int 10000) in
+      let group_name = "xackdel_test_group_" ^ string_of_int (Random.int 1000) in
+      
+      run_test_pipeline client [
+        (* Setup: create stream, consumer group and add messages *)
+        (fun state -> setup_clean_stream stream_name state);
+        (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+        (fun state -> add_stream_entry stream_name [("field2", "value2")] state);  
+        (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+        (fun state -> create_consumer_group group_name stream_name "0" state);
+        
+        (* Create pending messages by reading without acknowledging *)
+        (fun state ->
+          let* result = Client.xreadgroup state.client group_name "consumer1" [Client.{key=stream_name; id=">"}] in
+          match result with
+          | Error e -> Lwt.return (Error e)
+          | Ok xread_result ->
+              (match xread_result with
+               | (_, entries) :: _ when List.length entries >= 2 ->
+                   let updated_state = {state with entries} in
+                   return_ok () updated_state
+               | _ -> return_ok () state));
+        
+        (* Test XACKDEL with KEEPREF (default) - should acknowledge and delete *)
+        (fun state ->
+          if List.length state.entries > 0 then
+            let (first_id, _) = List.hd state.entries in
+            test_xackdel_single_entry group_name stream_name first_id 1 Ocamlot_infrastructure_redis.Commands.Keepref state
+          else return_ok () state);
+          
+        (* Test XACKDEL with DELREF - should acknowledge and delete with reference cleanup *)
+        (fun state ->
+          if List.length state.entries > 1 then
+            let remaining_entries = List.tl state.entries in
+            let remaining_ids = List.map (fun (entry_id, _) -> entry_id) remaining_entries in
+            let expected_results = List.map (fun _ -> 1) remaining_ids in
+            test_xackdel_multiple_entries group_name stream_name remaining_ids expected_results Ocamlot_infrastructure_redis.Commands.Delref state
+          else return_ok () state);
+          
+        (* Test XACKDEL with nonexistent message IDs *)
+        (fun state ->
+          let nonexistent_ids = ["9999999999-0"; "8888888888-0"] in
+          let expected_results = [-1; -1] in
+          test_xackdel_multiple_entries group_name stream_name nonexistent_ids expected_results Ocamlot_infrastructure_redis.Commands.Keepref state);
+          
+        (* Test XACKDEL ACKED option with new messages *)
+        (fun state -> add_stream_entry stream_name [("field4", "value4")] state);
+        (fun state ->
+          (* Create another pending message *)
+          let* result = Client.xreadgroup state.client group_name "consumer2" [Client.{key=stream_name; id=">"}] in
+          match result with
+          | Error e -> Lwt.return (Error e)
+          | Ok xread_result ->
+              (match xread_result with
+               | [(_, [(new_id, _)])] ->
+                   (* Test ACKED mode - should acknowledge but may not delete if not acked by all groups *)
+                   test_xackdel_single_entry group_name stream_name new_id 1 Ocamlot_infrastructure_redis.Commands.Acked state
+               | _ -> return_ok () state));
+        
+        (* Cleanup *)
+        (fun state -> cleanup_stream stream_name state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XACKDEL operations failed: %s" (show_client_error e))
+
 (* XPENDING Pipeline Test Functions *)
 let test_xpending_summary group_name stream_name expected_count state =
   let* result = Client.xpending state.client stream_name group_name () in
@@ -1188,6 +1284,7 @@ let integration_stream_tests =
      test_case "xread operations" `Quick test_xread_operations_new;
      test_case "xreadgroup operations" `Quick test_xreadgroup_operations;
      test_case "xack operations" `Quick test_xack_operations;
+     test_case "xackdel operations" `Quick test_xackdel_operations;
      test_case "xpending operations" `Quick test_xpending_operations;
      test_case "xclaim and xautoclaim operations" `Quick test_xclaim_xautoclaim_operations;
      test_case "xdel operations" `Quick test_xdel_operations;
@@ -1204,6 +1301,9 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xack operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xackdel operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xpending operations (skipped - no Redis)" `Quick (fun _switch () ->

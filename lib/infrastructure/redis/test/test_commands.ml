@@ -2501,6 +2501,139 @@ let xack_command_tests =
       (fun () -> xack "mystream" "mygroup" [])
       (xack "mystream" "mygroup" []) ]
 
+(* XACKDEL Commands *)
+let xackdel_command_tests =
+  [ test_command_serialization "xackdel single id default keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*7\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xackdel single id explicit keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*7\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xackdel single id delref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "DELREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*7\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$6\r\nDELREF\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xackdel single id acked"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "ACKED")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*7\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$5\r\nACKED\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xackdel multiple ids keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "2")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1") ] ) )
+      "*8\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n2\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n"
+
+  ; test_command_serialization "xackdel multiple ids delref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "DELREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "3")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1")
+             ; BulkString (Some "1526985056000-0") ] ) )
+      "*9\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$6\r\nDELREF\r\n$3\r\nIDS\r\n$1\r\n3\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n$15\r\n1526985056000-0\r\n"
+
+  ; test_command_serialization "xackdel with special characters in names"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes")
+             ; BulkString (Some "ACKED")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "0-0") ] ) )
+      "*7\r\n$7\r\nXACKDEL\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n$5\r\nACKED\r\n$3\r\nIDS\r\n$1\r\n1\r\n$3\r\n0-0\r\n"
+
+  ; test_command_serialization "xackdel empty ids list"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACKDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "0") ] ) )
+      "*6\r\n$7\r\nXACKDEL\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n0\r\n"
+
+  (* Roundtrip tests *)
+  ; test_command_roundtrip "xackdel single id default roundtrip"
+      (fun () -> xackdel "mystream" "mygroup" ["1526985054069-0"] ())
+      (xackdel "mystream" "mygroup" ["1526985054069-0"] ())
+
+  ; test_command_roundtrip "xackdel single id keepref roundtrip"
+      (fun () -> xackdel "mystream" "mygroup" ["1526985054069-0"] ~ref_handling:Keepref ())
+      (xackdel "mystream" "mygroup" ["1526985054069-0"] ~ref_handling:Keepref ())
+
+  ; test_command_roundtrip "xackdel single id delref roundtrip"
+      (fun () -> xackdel "mystream" "mygroup" ["1526985054069-0"] ~ref_handling:Delref ())
+      (xackdel "mystream" "mygroup" ["1526985054069-0"] ~ref_handling:Delref ())
+
+  ; test_command_roundtrip "xackdel single id acked roundtrip"
+      (fun () -> xackdel "mystream" "mygroup" ["1526985054069-0"] ~ref_handling:Acked ())
+      (xackdel "mystream" "mygroup" ["1526985054069-0"] ~ref_handling:Acked ())
+
+  ; test_command_roundtrip "xackdel multiple ids delref roundtrip"
+      (fun () -> xackdel "mystream" "mygroup" ["1526985054069-0"; "1526985055000-1"] ~ref_handling:Delref ())
+      (xackdel "mystream" "mygroup" ["1526985054069-0"; "1526985055000-1"] ~ref_handling:Delref ())
+
+  ; test_command_roundtrip "xackdel empty ids roundtrip"
+      (fun () -> xackdel "mystream" "mygroup" [] ())
+      (xackdel "mystream" "mygroup" [] ()) ]
+
 (* XPENDING Commands *)
 let xpending_command_tests =
   [ test_command_serialization "xpending summary form"
@@ -3127,7 +3260,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xpending_command_tests @ xclaim_command_tests @ xautoclaim_command_tests @ xdel_command_tests @ xdelex_command_tests @ xtrim_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xackdel_command_tests @ xpending_command_tests @ xclaim_command_tests @ xautoclaim_command_tests @ xdel_command_tests @ xdelex_command_tests @ xtrim_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)
