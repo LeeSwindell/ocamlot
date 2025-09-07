@@ -119,6 +119,15 @@ val xdel : t -> string -> string list -> (int, client_error) result Lwt.t
     - ids: list of entry IDs to delete (e.g., ["1526985054069-0"; "1526985055000-1"])
     Returns the number of entries that were actually deleted (may be less than requested if some IDs don't exist) *)
 
+val xtrim : t -> string -> Commands.xtrim_strategy -> ?operator:Commands.xtrim_operator -> ?limit:int -> ?ref_handling:Commands.xtrim_ref_handling -> unit -> (int, client_error) result Lwt.t
+(** Trim a stream by removing older entries.
+    - key: stream name
+    - strategy: trimming strategy (Maxlen count or Minid id)
+    - operator: Exact (=) or Approximate (~) trimming (default: Exact)
+    - limit: maximum number of entries to examine during trimming
+    - ref_handling: how to handle consumer group references (Keepref, Delref, Acked)
+    Returns the number of entries that were removed from the stream *)
+
 (** {1 Low-level Operations} *)
 
 val execute :

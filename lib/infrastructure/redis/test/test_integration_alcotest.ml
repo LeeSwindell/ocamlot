@@ -625,12 +625,105 @@ let test_xdel_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XDEL operations failed: %s" (show_client_error e))
 
+(* XTRIM-specific pipeline functions *)
+let test_xtrim_maxlen stream_name max_len expected_count state =
+  let* result = Client.xtrim state.client stream_name (Ocamlot_infrastructure_redis.Commands.Maxlen max_len) () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      if count <> expected_count then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected XTRIM MAXLEN to remove %d entries, got %d" expected_count count)))
+      else
+        return_ok () state
+
+let test_xtrim_minid stream_name min_id expected_count state =
+  let* result = Client.xtrim state.client stream_name (Ocamlot_infrastructure_redis.Commands.Minid min_id) () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      if count <> expected_count then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected XTRIM MINID to remove %d entries, got %d" expected_count count)))
+      else
+        return_ok () state
+
+let test_xtrim_approximate stream_name max_len state =
+  let* result = Client.xtrim state.client stream_name (Ocamlot_infrastructure_redis.Commands.Maxlen max_len) ~operator:Ocamlot_infrastructure_redis.Commands.Approximate () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok _count ->
+      (* Just verify it succeeded - Redis approximate trimming behavior can vary *)
+      return_ok () state
+
+let test_current_stream_length stream_name expected_length state =
+  let* result = Client.xlen state.client stream_name in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok length ->
+      if length <> expected_length then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected stream length %d, got %d" expected_length length)))
+      else
+        return_ok () state
+
+let test_xtrim_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_xtrim_stream_" ^ string_of_int (Random.int 10000) in
+        run_test_pipeline client [
+          (* Setup: Create stream with 5 entries *)
+          (fun state -> setup_clean_stream stream_name state);
+          (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+          (fun state -> add_stream_entry stream_name [("field2", "value2")] state);
+          (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+          (fun state -> add_stream_entry stream_name [("field4", "value4")] state);
+          (fun state -> add_stream_entry stream_name [("field5", "value5")] state);
+          
+          (* Verify we have 5 entries *)
+          (fun state -> test_current_stream_length stream_name 5 state);
+          
+          (* Test 1: XTRIM MAXLEN to keep only 3 entries (should remove 2) *)
+          (fun state -> test_xtrim_maxlen stream_name 3 2 state);
+          (fun state -> test_current_stream_length stream_name 3 state);
+          
+          (* Test 2: Add more entries for MINID test *)
+          (fun state -> add_stream_entry stream_name [("field6", "value6")] state);
+          (fun state -> add_stream_entry stream_name [("field7", "value7")] state);
+          (fun state -> test_current_stream_length stream_name 5 state);
+          
+          (* Test 3: XTRIM MINID - trim everything before the middle entry *)
+          (fun state ->
+             let middle_id = match state.entries with
+             | (_, _) :: (id2, _) :: _ -> id2  (* Second newest entry *)
+             | _ -> failwith "Expected at least 2 entries"
+             in
+             test_xtrim_minid stream_name middle_id 3 state);  (* Should remove 3 older entries *)
+          (fun state -> test_current_stream_length stream_name 2 state);
+          
+          (* Test 4: Add more entries and test approximate trimming *)
+          (fun state -> add_stream_entry stream_name [("field8", "value8")] state);
+          (fun state -> add_stream_entry stream_name [("field9", "value9")] state);
+          (fun state -> add_stream_entry stream_name [("field10", "value10")] state);
+          (fun state -> test_current_stream_length stream_name 5 state);
+          
+          (* Test 5: XTRIM approximate (just verify it works) *)
+          (fun state -> test_xtrim_approximate stream_name 1 state);
+          
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XTRIM operations failed: %s" (show_client_error e))
+
 let integration_stream_tests =
   if check_redis_available () then
     [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations;
      test_case "xread operations" `Quick test_xread_operations_new;
      test_case "xreadgroup operations" `Quick test_xreadgroup_operations;
-     test_case "xdel operations" `Quick test_xdel_operations]
+     test_case "xdel operations" `Quick test_xdel_operations;
+     test_case "xtrim operations" `Quick test_xtrim_operations]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
@@ -642,6 +735,9 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xdel operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xtrim operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 

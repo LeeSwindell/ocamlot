@@ -421,3 +421,16 @@ let xdel client key ids =
         (Error
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
+
+(* XTRIM operations *)
+let xtrim client key strategy ?operator ?limit ?ref_handling () =
+  let command = Commands.xtrim key strategy ?operator ?limit ?ref_handling () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Integer count) -> Lwt.return (Ok (Int64.to_int count))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )

@@ -1279,9 +1279,56 @@ let xdel key ids =
   Array (Some (base_cmd @ id_args))
 
 (** XTRIM key MAXLEN [~] count - Trim stream *)
-let xtrim _key ~maxlen:_maxlen ?approximate:_approximate _count =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+type xtrim_strategy = 
+  | Maxlen of int
+  | Minid of string
+
+type xtrim_operator = 
+  | Exact
+  | Approximate
+
+type xtrim_ref_handling = 
+  | Keepref
+  | Delref  
+  | Acked
+
+let xtrim key strategy ?(operator=Exact) ?limit ?ref_handling () =
+  let base_cmd = [BulkString (Some "XTRIM"); BulkString (Some key)] in
+  
+  (* Add strategy *)
+  let cmd_with_strategy = 
+    match strategy with
+    | Maxlen count -> 
+        base_cmd @ [BulkString (Some "MAXLEN")] @ 
+        (match operator with
+         | Exact -> [BulkString (Some "=")]
+         | Approximate -> [BulkString (Some "~")]) @
+        [BulkString (Some (string_of_int count))]
+    | Minid id ->
+        base_cmd @ [BulkString (Some "MINID")] @
+        (match operator with
+         | Exact -> [BulkString (Some "=")]
+         | Approximate -> [BulkString (Some "~")]) @
+        [BulkString (Some id)]
+  in
+  
+  (* Add LIMIT if specified *)
+  let cmd_with_limit = 
+    match limit with
+    | Some count -> cmd_with_strategy @ [BulkString (Some "LIMIT"); BulkString (Some (string_of_int count))]
+    | None -> cmd_with_strategy
+  in
+  
+  (* Add reference handling if specified *)
+  let final_cmd = 
+    match ref_handling with
+    | Some Keepref -> cmd_with_limit @ [BulkString (Some "KEEPREF")]
+    | Some Delref -> cmd_with_limit @ [BulkString (Some "DELREF")]
+    | Some Acked -> cmd_with_limit @ [BulkString (Some "ACKED")]
+    | None -> cmd_with_limit
+  in
+  
+  Array (Some final_cmd)
 
 (* =============================================================================
    PUBSUB COMMANDS

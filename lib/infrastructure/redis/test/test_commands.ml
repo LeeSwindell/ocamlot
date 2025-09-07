@@ -2499,6 +2499,135 @@ let xdel_command_tests =
       (fun () -> xdel "mystream" ["1526985054069-0"; "1526985055000-1"; "1526985056000-0"])
       (xdel "mystream" ["1526985054069-0"; "1526985055000-1"; "1526985056000-0"]) ]
 
+(* XTRIM Commands *)
+let xtrim_command_tests =
+  [ test_command_serialization "xtrim maxlen exact"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MAXLEN")
+             ; BulkString (Some "=")
+             ; BulkString (Some "100") ] ) )
+      "*5\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n=\r\n$3\r\n100\r\n"
+
+  ; test_command_serialization "xtrim maxlen approximate"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MAXLEN")
+             ; BulkString (Some "~")
+             ; BulkString (Some "1000") ] ) )
+      "*5\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$4\r\n1000\r\n"
+
+  ; test_command_serialization "xtrim minid exact"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MINID")
+             ; BulkString (Some "=")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*5\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$5\r\nMINID\r\n$1\r\n=\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xtrim minid approximate"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MINID")
+             ; BulkString (Some "~")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*5\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$5\r\nMINID\r\n$1\r\n~\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xtrim maxlen with limit"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MAXLEN")
+             ; BulkString (Some "~")
+             ; BulkString (Some "100")
+             ; BulkString (Some "LIMIT")
+             ; BulkString (Some "50") ] ) )
+      "*7\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$3\r\n100\r\n$5\r\nLIMIT\r\n$2\r\n50\r\n"
+
+  ; test_command_serialization "xtrim minid with keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MINID")
+             ; BulkString (Some "=")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "KEEPREF") ] ) )
+      "*6\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$5\r\nMINID\r\n$1\r\n=\r\n$15\r\n1526985054069-0\r\n$7\r\nKEEPREF\r\n"
+
+  ; test_command_serialization "xtrim maxlen with delref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MAXLEN")
+             ; BulkString (Some "~")
+             ; BulkString (Some "200")
+             ; BulkString (Some "DELREF") ] ) )
+      "*6\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$3\r\n200\r\n$6\r\nDELREF\r\n"
+
+  ; test_command_serialization "xtrim minid with acked"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MINID")
+             ; BulkString (Some "~")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "ACKED") ] ) )
+      "*6\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$5\r\nMINID\r\n$1\r\n~\r\n$15\r\n1526985054069-0\r\n$5\r\nACKED\r\n"
+
+  ; test_command_serialization "xtrim all options"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XTRIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "MAXLEN")
+             ; BulkString (Some "~")
+             ; BulkString (Some "500")
+             ; BulkString (Some "LIMIT")
+             ; BulkString (Some "25")
+             ; BulkString (Some "KEEPREF") ] ) )
+      "*8\r\n$5\r\nXTRIM\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$3\r\n500\r\n$5\r\nLIMIT\r\n$2\r\n25\r\n$7\r\nKEEPREF\r\n"
+
+  ; test_command_roundtrip "xtrim maxlen exact roundtrip"
+      (fun () -> xtrim "mystream" (Maxlen 100) ())
+      (xtrim "mystream" (Maxlen 100) ())
+
+  ; test_command_roundtrip "xtrim maxlen approximate roundtrip"
+      (fun () -> xtrim "mystream" (Maxlen 1000) ~operator:Approximate ())
+      (xtrim "mystream" (Maxlen 1000) ~operator:Approximate ())
+
+  ; test_command_roundtrip "xtrim minid exact roundtrip"
+      (fun () -> xtrim "mystream" (Minid "1526985054069-0") ())
+      (xtrim "mystream" (Minid "1526985054069-0") ())
+
+  ; test_command_roundtrip "xtrim minid approximate roundtrip"
+      (fun () -> xtrim "mystream" (Minid "1526985054069-0") ~operator:Approximate ())
+      (xtrim "mystream" (Minid "1526985054069-0") ~operator:Approximate ())
+
+  ; test_command_roundtrip "xtrim with all options roundtrip"
+      (fun () -> xtrim "mystream" (Maxlen 500) ~operator:Approximate ~limit:25 ~ref_handling:Keepref ())
+      (xtrim "mystream" (Maxlen 500) ~operator:Approximate ~limit:25 ~ref_handling:Keepref ()) ]
+
 (* Pub/Sub Commands *)
 let pubsub_command_tests =
   [ test_command_serialization "publish command"
@@ -2556,7 +2685,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xdel_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)
