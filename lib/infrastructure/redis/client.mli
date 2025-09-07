@@ -189,6 +189,81 @@ val xinfo_groups : t -> string -> (group_info list, client_error) result Lwt.t
     this cannot be determined (e.g., when groups are created with arbitrary IDs or entries
     were deleted). Available since Redis 5.0.0. *)
 
+(** Stream entry information: (entry_id, [(field, value); ...]) *)
+type stream_entry_info = string * (string * string) list
+
+(** Basic stream information returned by XINFO STREAM *)
+type stream_info_basic = {
+  length: int;                          (** Number of entries in the stream *)
+  radix_tree_keys: int;                 (** Number of keys in underlying radix tree *)
+  radix_tree_nodes: int;                (** Number of nodes in underlying radix tree *)
+  last_generated_id: string;            (** ID of the last entry added to the stream *)
+  max_deleted_entry_id: string option;  (** Maximum ID that was deleted (Redis 7.0.0+) *)
+  entries_added: int option;            (** Total entries added during stream lifetime (Redis 7.0.0+) *)
+  recorded_first_entry_id: string option; (** ID of first entry (Redis 7.0.0+) *)
+  groups: int;                          (** Number of consumer groups *)
+  first_entry: stream_entry_info option; (** First entry in the stream *)
+  last_entry: stream_entry_info option;  (** Last entry in the stream *)
+}
+
+(** Pending entry information in FULL mode *)
+type pending_entry_full = {
+  entry_id: string;                     (** Message ID *)
+  consumer: string option;              (** Consumer name (None in consumer-specific context) *)
+  timestamp: int;                       (** Unix timestamp of delivery *)
+  delivery_count: int;                  (** Number of times delivered *)
+}
+
+(** Consumer information in FULL mode *)
+type consumer_full = {
+  name: string;                         (** Consumer name *)
+  seen_time: int;                       (** Unix timestamp of last attempted interaction *)
+  active_time: int option;              (** Unix timestamp of last successful interaction (Redis 7.2.0+) *)
+  pel_count: int;                       (** Number of pending entries *)
+  pending: pending_entry_full list;     (** Pending entries for this consumer *)
+}
+
+(** Consumer group information in FULL mode *)
+type group_full = {
+  name: string;                         (** Group name *)
+  last_delivered_id: string;            (** Last delivered message ID *)
+  entries_read: int;                    (** Logical read counter *)
+  lag: int option;                      (** Number of undelivered entries (None if unavailable) *)
+  pel_count: int;                       (** Total pending entries in group *)
+  pending: pending_entry_full list;     (** Pending entries for the group *)
+  consumers: consumer_full list;        (** Consumers in this group *)
+}
+
+(** Full stream information returned by XINFO STREAM FULL *)
+type stream_info_full = {
+  length: int;                          (** Number of entries in the stream *)
+  radix_tree_keys: int;                 (** Number of keys in underlying radix tree *)
+  radix_tree_nodes: int;                (** Number of nodes in underlying radix tree *)
+  last_generated_id: string;            (** ID of the last entry added to the stream *)
+  max_deleted_entry_id: string option;  (** Maximum ID that was deleted (Redis 7.0.0+) *)
+  entries_added: int option;            (** Total entries added during stream lifetime (Redis 7.0.0+) *)
+  recorded_first_entry_id: string option; (** ID of first entry (Redis 7.0.0+) *)
+  entries: stream_entry_info list;      (** All stream entries (limited by COUNT) *)
+  groups: group_full list;               (** Detailed consumer group information *)
+}
+
+(** Stream information result type *)
+type stream_info = 
+  | Basic of stream_info_basic          (** Basic mode result *)
+  | Full of stream_info_full            (** Full mode result *)
+
+val xinfo_stream : t -> string -> ?full:bool -> ?count:int -> unit -> (stream_info, client_error) result Lwt.t
+(** Get detailed information about a stream.
+    - key: stream name
+    - full: if true, return extended information including entries and detailed group info
+    - count: limit number of entries returned in FULL mode (default: 10, 0 = all)
+    Returns either Basic or Full stream information
+    
+    Basic mode provides summary information about the stream.
+    Full mode includes all stream entries (limited by count) and detailed consumer group
+    information including all consumers and pending entries.
+    Available since Redis 5.0.0, FULL modifier since 6.0.0. *)
+
 val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
 (** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
     - key: stream name

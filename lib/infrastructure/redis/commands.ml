@@ -1422,6 +1422,23 @@ let xinfo_groups key =
     BulkString (Some key)
   ])
 
+(** XINFO STREAM key [FULL [COUNT count]] - Return information about a stream *)
+let xinfo_stream key ?full ?count () =
+  let base_cmd = [
+    BulkString (Some "XINFO");
+    BulkString (Some "STREAM");
+    BulkString (Some key)
+  ] in
+  let cmd_with_full = match full with
+    | Some true -> base_cmd @ [BulkString (Some "FULL")]
+    | _ -> base_cmd
+  in
+  let final_cmd = match full, count with
+    | Some true, Some cnt -> cmd_with_full @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int cnt))]
+    | _ -> cmd_with_full
+  in
+  Array (Some final_cmd)
+
 (** XDEL key ID [ID ...] - Delete stream entries *)
 let xdel key ids =
   let base_cmd = [BulkString (Some "XDEL"); BulkString (Some key)] in

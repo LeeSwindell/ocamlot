@@ -2616,7 +2616,63 @@ let xgroup_command_tests =
 
   ; test_command_roundtrip "xinfo groups with special characters roundtrip"
       (fun () -> xinfo_groups "stream:with:colons")
-      (xinfo_groups "stream:with:colons") ]
+      (xinfo_groups "stream:with:colons")
+
+  ; test_command_serialization "xinfo stream basic"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XINFO")
+             ; BulkString (Some "STREAM")
+             ; BulkString (Some "mystream") ] ) )
+      "*3\r\n$5\r\nXINFO\r\n$6\r\nSTREAM\r\n$8\r\nmystream\r\n"
+
+  ; test_command_serialization "xinfo stream full"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XINFO")
+             ; BulkString (Some "STREAM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "FULL") ] ) )
+      "*4\r\n$5\r\nXINFO\r\n$6\r\nSTREAM\r\n$8\r\nmystream\r\n$4\r\nFULL\r\n"
+
+  ; test_command_serialization "xinfo stream full with count"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XINFO")
+             ; BulkString (Some "STREAM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "FULL")
+             ; BulkString (Some "COUNT")
+             ; BulkString (Some "10") ] ) )
+      "*6\r\n$5\r\nXINFO\r\n$6\r\nSTREAM\r\n$8\r\nmystream\r\n$4\r\nFULL\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n"
+
+  ; test_command_serialization "xinfo stream with special characters"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XINFO")
+             ; BulkString (Some "STREAM")
+             ; BulkString (Some "stream:with:colons") ] ) )
+      "*3\r\n$5\r\nXINFO\r\n$6\r\nSTREAM\r\n$18\r\nstream:with:colons\r\n"
+
+  ; test_command_roundtrip "xinfo stream basic roundtrip"
+      (fun () -> xinfo_stream "mystream" ())
+      (xinfo_stream "mystream" ())
+
+  ; test_command_roundtrip "xinfo stream full roundtrip"
+      (fun () -> xinfo_stream "mystream" ~full:true ())
+      (xinfo_stream "mystream" ~full:true ())
+
+  ; test_command_roundtrip "xinfo stream full with count roundtrip"
+      (fun () -> xinfo_stream "mystream" ~full:true ~count:20 ())
+      (xinfo_stream "mystream" ~full:true ~count:20 ())
+
+  ; test_command_roundtrip "xinfo stream with special characters roundtrip"
+      (fun () -> xinfo_stream "stream:with:colons" ())
+      (xinfo_stream "stream:with:colons" ()) ]
 
 (* XACK Commands *)
 let xack_command_tests =

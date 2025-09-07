@@ -1713,6 +1713,93 @@ let test_xinfo_groups_group_info stream_name group_name expected_consumers expec
            else
              return_ok () state)
 
+let test_xinfo_stream_basic stream_name expected_length expected_groups state =
+  let* result = Client.xinfo_stream state.client stream_name () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.Basic info) ->
+      if info.length <> expected_length then
+        Lwt.return (Error (Client.Redis_error 
+          (Printf.sprintf "Expected stream length %d, got %d" expected_length info.length)))
+      else if info.groups <> expected_groups then
+        Lwt.return (Error (Client.Redis_error 
+          (Printf.sprintf "Expected %d groups, got %d" expected_groups info.groups)))
+      else
+        return_ok () state
+  | Ok (Client.Full _) ->
+      Lwt.return (Error (Client.Redis_error "Expected Basic response, got Full"))
+
+let test_xinfo_stream_full stream_name expected_entries expected_groups state =
+  let* result = Client.xinfo_stream state.client stream_name ~full:true () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.Full info) ->
+      if List.length info.entries <> expected_entries then
+        Lwt.return (Error (Client.Redis_error 
+          (Printf.sprintf "Expected %d entries in FULL mode, got %d" expected_entries (List.length info.entries))))
+      else if List.length info.groups <> expected_groups then
+        Lwt.return (Error (Client.Redis_error 
+          (Printf.sprintf "Expected %d groups in FULL mode, got %d" expected_groups (List.length info.groups))))
+      else if info.length <> expected_entries then
+        Lwt.return (Error (Client.Redis_error 
+          (Printf.sprintf "Expected stream length %d in FULL mode, got %d" expected_entries info.length)))
+      else
+        return_ok () state
+  | Ok (Client.Basic _) ->
+      Lwt.return (Error (Client.Redis_error "Expected Full response, got Basic"))
+
+let test_xinfo_stream_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_xinfo_stream_" ^ string_of_int (Random.int 10000) in
+        let group_name = "test_xinfo_stream_group_" ^ string_of_int (Random.int 1000) in
+        
+        run_test_pipeline client [
+          (* Setup: create stream with entries *)
+          (fun state -> setup_clean_stream stream_name state);
+          (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+          (fun state -> add_stream_entry stream_name [("field2", "value2")] state);
+          (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+          
+          (* Test 1: XINFO STREAM on stream with no groups *)
+          (fun state -> test_xinfo_stream_basic stream_name 3 0 state);
+          
+          (* Test 2: Create a consumer group and verify it appears in stream info *)
+          (fun state -> create_consumer_group group_name stream_name "0" state);
+          (fun state -> test_xinfo_stream_basic stream_name 3 1 state);
+          
+          (* Test 3: Add more entries and verify length increases *)
+          (fun state -> add_stream_entry stream_name [("field4", "value4")] state);
+          (fun state -> add_stream_entry stream_name [("field5", "value5")] state);
+          (fun state -> test_xinfo_stream_basic stream_name 5 1 state);
+          
+          (* Test 4: Test with special characters in stream name *)
+          (fun state -> setup_clean_stream "special:stream_name" state);
+          (fun state -> add_stream_entry "special:stream_name" [("test", "value")] state);
+          (fun state -> test_xinfo_stream_basic "special:stream_name" 1 0 state);
+          
+          (* Test 5: XINFO STREAM FULL mode tests *)
+          (fun state -> test_xinfo_stream_full stream_name 5 1 state);
+          (fun state -> test_xinfo_stream_full "special:stream_name" 1 0 state);
+          
+          (* Test 6: FULL mode with entries and verify entry data *)
+          (fun state -> setup_clean_stream "full_test_stream" state);
+          (fun state -> add_stream_entry "full_test_stream" [("key1", "val1"); ("key2", "val2")] state);
+          (fun state -> add_stream_entry "full_test_stream" [("key3", "val3")] state);
+          (fun state -> test_xinfo_stream_full "full_test_stream" 2 0 state);
+          
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+          (fun state -> cleanup_stream "special:stream_name" state);
+          (fun state -> cleanup_stream "full_test_stream" state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XINFO STREAM operations failed: %s" (show_client_error e))
+
 let test_xinfo_groups_operations _switch () =
   let* result =
     Client.with_client test_config (fun client ->
@@ -1779,7 +1866,8 @@ let integration_xgroup_tests =
      test_case "xgroup delconsumer operations" `Quick test_xgroup_delconsumer_operations;
      test_case "xgroup setid operations" `Quick test_xgroup_setid_operations;
      test_case "xinfo consumers operations" `Quick test_xinfo_consumers_operations;
-     test_case "xinfo groups operations" `Quick test_xinfo_groups_operations]
+     test_case "xinfo groups operations" `Quick test_xinfo_groups_operations;
+     test_case "xinfo stream operations" `Quick test_xinfo_stream_operations]
   else
     [ test_case "xgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
@@ -1797,6 +1885,9 @@ let integration_xgroup_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xinfo groups operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xinfo stream operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 

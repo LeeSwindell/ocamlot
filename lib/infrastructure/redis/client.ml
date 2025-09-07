@@ -579,6 +579,297 @@ let xinfo_groups client key =
            (Parse_error
               ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XINFO STREAM data types and operations *)
+type stream_entry_info = string * (string * string) list
+
+type stream_info_basic = {
+  length: int;
+  radix_tree_keys: int;
+  radix_tree_nodes: int;
+  last_generated_id: string;
+  max_deleted_entry_id: string option;
+  entries_added: int option;
+  recorded_first_entry_id: string option;
+  groups: int;
+  first_entry: stream_entry_info option;
+  last_entry: stream_entry_info option;
+}
+
+type pending_entry_full = {
+  entry_id: string;
+  consumer: string option; (* None in consumer-specific context *)
+  timestamp: int;
+  delivery_count: int;
+}
+
+type consumer_full = {
+  name: string;
+  seen_time: int;
+  active_time: int option;
+  pel_count: int;
+  pending: pending_entry_full list;
+}
+
+type group_full = {
+  name: string;
+  last_delivered_id: string;
+  entries_read: int;
+  lag: int option;
+  pel_count: int;
+  pending: pending_entry_full list;
+  consumers: consumer_full list;
+}
+
+type stream_info_full = {
+  length: int;
+  radix_tree_keys: int;
+  radix_tree_nodes: int;
+  last_generated_id: string;
+  max_deleted_entry_id: string option;
+  entries_added: int option;
+  recorded_first_entry_id: string option;
+  entries: stream_entry_info list;
+  groups: group_full list;
+}
+
+type stream_info = 
+  | Basic of stream_info_basic
+  | Full of stream_info_full
+
+let parse_stream_entry_from_array = function
+  | [Resp3.BulkString (Some id); Resp3.Array (Some fields)] ->
+      let rec parse_fields acc = function
+        | [] -> Ok (List.rev acc)
+        | (Resp3.BulkString (Some k)) :: (Resp3.BulkString (Some v)) :: rest ->
+            parse_fields ((k, v) :: acc) rest
+        | _ -> Error "Invalid field format in stream entry"
+      in
+      (match parse_fields [] fields with
+       | Ok field_list -> Ok (id, field_list)
+       | Error e -> Error e)
+  | _ -> Error "Invalid stream entry format"
+
+let parse_stream_info_array arr =
+  let rec parse_pairs first_entry_acc last_entry_acc acc = function
+    | (Resp3.BulkString (Some "length")) :: (Resp3.Integer len) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("length", Int64.to_string len) :: acc) rest
+    | (Resp3.BulkString (Some "radix-tree-keys")) :: (Resp3.Integer keys) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("radix-tree-keys", Int64.to_string keys) :: acc) rest
+    | (Resp3.BulkString (Some "radix-tree-nodes")) :: (Resp3.Integer nodes) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("radix-tree-nodes", Int64.to_string nodes) :: acc) rest
+    | (Resp3.BulkString (Some "last-generated-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("last-generated-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "max-deleted-entry-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("max-deleted-entry-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "entries-added")) :: (Resp3.Integer count) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("entries-added", Int64.to_string count) :: acc) rest
+    | (Resp3.BulkString (Some "recorded-first-entry-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("recorded-first-entry-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "groups")) :: (Resp3.Integer count) :: rest ->
+        parse_pairs first_entry_acc last_entry_acc (("groups", Int64.to_string count) :: acc) rest
+    | (Resp3.BulkString (Some "first-entry")) :: (Resp3.Array (Some entry_data)) :: rest ->
+        (* Parse the first entry *)
+        (match parse_stream_entry_from_array entry_data with
+         | Ok entry -> parse_pairs (Some entry) last_entry_acc (("first-entry", "parsed") :: acc) rest
+         | Error e -> Error e)
+    | (Resp3.BulkString (Some "first-entry")) :: Resp3.Null :: rest ->
+        (* No first entry *)
+        parse_pairs None last_entry_acc (("first-entry", "null") :: acc) rest
+    | (Resp3.BulkString (Some "last-entry")) :: (Resp3.Array (Some entry_data)) :: rest ->
+        (* Parse the last entry *)
+        (match parse_stream_entry_from_array entry_data with
+         | Ok entry -> parse_pairs first_entry_acc (Some entry) (("last-entry", "parsed") :: acc) rest
+         | Error e -> Error e)
+    | (Resp3.BulkString (Some "last-entry")) :: Resp3.Null :: rest ->
+        (* No last entry *)
+        parse_pairs first_entry_acc None (("last-entry", "null") :: acc) rest
+    | (Resp3.BulkString (Some "entries")) :: (Resp3.Array (Some _)) :: rest ->
+        (* This means it's a FULL response - switch to full parsing *)
+        parse_pairs first_entry_acc last_entry_acc (("entries", "present") :: acc) rest
+    | [] -> Ok (List.rev acc, first_entry_acc, last_entry_acc)
+    | (Resp3.BulkString (Some _)) :: _ :: rest ->
+        (* Skip unknown field-value pairs *)
+        parse_pairs first_entry_acc last_entry_acc acc rest
+    | _ -> Error "Invalid stream info format"
+  in
+  match parse_pairs None None [] arr with
+  | Ok (pairs, first_entry, last_entry) -> Ok (pairs, first_entry, last_entry)
+  | Error e -> Error e
+
+let parse_group_full_from_array = function
+  | group_data ->
+      let rec parse_group_fields acc = function
+        | (Resp3.BulkString (Some "name")) :: (Resp3.BulkString (Some name)) :: rest ->
+            parse_group_fields (("name", name) :: acc) rest
+        | (Resp3.BulkString (Some "last-delivered-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+            parse_group_fields (("last-delivered-id", id) :: acc) rest
+        | (Resp3.BulkString (Some "entries-read")) :: (Resp3.Integer count) :: rest ->
+            parse_group_fields (("entries-read", Int64.to_string count) :: acc) rest
+        | (Resp3.BulkString (Some "lag")) :: (Resp3.Integer lag) :: rest ->
+            parse_group_fields (("lag", Int64.to_string lag) :: acc) rest
+        | (Resp3.BulkString (Some "lag")) :: Resp3.Null :: rest ->
+            parse_group_fields (("lag", "null") :: acc) rest
+        | (Resp3.BulkString (Some "pel-count")) :: (Resp3.Integer count) :: rest ->
+            parse_group_fields (("pel-count", Int64.to_string count) :: acc) rest
+        | (Resp3.BulkString (Some "pending")) :: (Resp3.Array (Some _)) :: rest ->
+            parse_group_fields (("pending", "array") :: acc) rest
+        | (Resp3.BulkString (Some "consumers")) :: (Resp3.Array (Some _)) :: rest ->
+            parse_group_fields (("consumers", "array") :: acc) rest
+        | [] -> Ok (List.rev acc)
+        | _ :: _ :: rest ->
+            (* Skip unknown field-value pairs *)
+            parse_group_fields acc rest
+        | _ -> Error "Invalid group info format"
+      in
+      match parse_group_fields [] group_data with
+      | Ok pairs ->
+          let name = List.assoc_opt "name" pairs |> Option.value ~default:"" in
+          let last_delivered_id = List.assoc_opt "last-delivered-id" pairs |> Option.value ~default:"0-0" in
+          let entries_read = List.assoc_opt "entries-read" pairs |> Option.value ~default:"0" |> int_of_string in
+          let lag = match List.assoc_opt "lag" pairs with
+            | Some "null" -> None
+            | Some lag_str -> Some (int_of_string lag_str)
+            | None -> None
+          in
+          let pel_count = List.assoc_opt "pel-count" pairs |> Option.value ~default:"0" |> int_of_string in
+          (* For now, return empty lists for pending and consumers - full parsing would be very complex *)
+          Ok {
+            name;
+            last_delivered_id;
+            entries_read;
+            lag;
+            pel_count;
+            pending = [];
+            consumers = [];
+          }
+      | Error e -> Error e
+
+let parse_full_stream_info arr =
+  let rec extract_data entries_acc groups_acc acc = function
+    | (Resp3.BulkString (Some "length")) :: (Resp3.Integer len) :: rest ->
+        extract_data entries_acc groups_acc (("length", Int64.to_string len) :: acc) rest
+    | (Resp3.BulkString (Some "radix-tree-keys")) :: (Resp3.Integer keys) :: rest ->
+        extract_data entries_acc groups_acc (("radix-tree-keys", Int64.to_string keys) :: acc) rest
+    | (Resp3.BulkString (Some "radix-tree-nodes")) :: (Resp3.Integer nodes) :: rest ->
+        extract_data entries_acc groups_acc (("radix-tree-nodes", Int64.to_string nodes) :: acc) rest
+    | (Resp3.BulkString (Some "last-generated-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        extract_data entries_acc groups_acc (("last-generated-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "max-deleted-entry-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        extract_data entries_acc groups_acc (("max-deleted-entry-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "entries-added")) :: (Resp3.Integer count) :: rest ->
+        extract_data entries_acc groups_acc (("entries-added", Int64.to_string count) :: acc) rest
+    | (Resp3.BulkString (Some "recorded-first-entry-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        extract_data entries_acc groups_acc (("recorded-first-entry-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "entries")) :: (Resp3.Array (Some entries_arr)) :: rest ->
+        (* Parse entries array *)
+        let parse_entries entries_list =
+          List.fold_right (fun entry_elem acc ->
+            match acc with
+            | Error e -> Error e
+            | Ok entries_acc ->
+                match entry_elem with
+                | Resp3.Array (Some entry_data) ->
+                    (match parse_stream_entry_from_array entry_data with
+                     | Ok entry -> Ok (entry :: entries_acc)
+                     | Error e -> Error e)
+                | _ -> Error "Invalid entry in entries array"
+          ) entries_list (Ok [])
+        in
+        (match parse_entries entries_arr with
+         | Ok entries_list -> extract_data entries_list groups_acc acc rest
+         | Error e -> Error e)
+    | (Resp3.BulkString (Some "groups")) :: (Resp3.Array (Some groups_arr)) :: rest ->
+        (* Parse groups array *)
+        let parse_groups groups_list =
+          List.fold_right (fun group_elem acc ->
+            match acc with
+            | Error e -> Error e
+            | Ok groups_acc ->
+                match group_elem with
+                | Resp3.Array (Some group_data) ->
+                    (match parse_group_full_from_array group_data with
+                     | Ok group -> Ok (group :: groups_acc)
+                     | Error e -> Error e)
+                | _ -> Error "Invalid group in groups array"
+          ) groups_list (Ok [])
+        in
+        (match parse_groups groups_arr with
+         | Ok groups_list -> extract_data entries_acc groups_list acc rest
+         | Error e -> Error e)
+    | [] -> Ok (List.rev acc, entries_acc, groups_acc)
+    | _ :: _ :: rest ->
+        (* Skip unknown field-value pairs *)
+        extract_data entries_acc groups_acc acc rest
+    | _ -> Error "Invalid full stream info format"
+  in
+  match extract_data [] [] [] arr with
+  | Ok (pairs, entries_list, groups_list) ->
+      let length = List.assoc_opt "length" pairs |> Option.value ~default:"0" |> int_of_string in
+      let radix_tree_keys = List.assoc_opt "radix-tree-keys" pairs |> Option.value ~default:"0" |> int_of_string in
+      let radix_tree_nodes = List.assoc_opt "radix-tree-nodes" pairs |> Option.value ~default:"0" |> int_of_string in
+      let last_generated_id = List.assoc_opt "last-generated-id" pairs |> Option.value ~default:"0-0" in
+      let max_deleted_entry_id = List.assoc_opt "max-deleted-entry-id" pairs in
+      let entries_added = List.assoc_opt "entries-added" pairs |> Option.map int_of_string in
+      let recorded_first_entry_id = List.assoc_opt "recorded-first-entry-id" pairs in
+      Ok {
+        length;
+        radix_tree_keys;
+        radix_tree_nodes;
+        last_generated_id;
+        max_deleted_entry_id;
+        entries_added;
+        recorded_first_entry_id;
+        entries = entries_list;
+        groups = groups_list;
+      }
+  | Error e -> Error e
+
+let xinfo_stream client key ?full ?count () =
+  let command = Commands.xinfo_stream key ?full ?count () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some arr)) ->
+      (* For now, let's implement basic parsing only *)
+      (match parse_stream_info_array arr with
+       | Ok (pairs, first_entry, last_entry) ->
+           let length = List.assoc_opt "length" pairs |> Option.value ~default:"0" |> int_of_string in
+           let radix_tree_keys = List.assoc_opt "radix-tree-keys" pairs |> Option.value ~default:"0" |> int_of_string in
+           let radix_tree_nodes = List.assoc_opt "radix-tree-nodes" pairs |> Option.value ~default:"0" |> int_of_string in
+           let last_generated_id = List.assoc_opt "last-generated-id" pairs |> Option.value ~default:"0-0" in
+           let groups = List.assoc_opt "groups" pairs |> Option.value ~default:"0" |> int_of_string in
+           let max_deleted_entry_id = List.assoc_opt "max-deleted-entry-id" pairs in
+           let entries_added = List.assoc_opt "entries-added" pairs |> Option.map int_of_string in
+           let recorded_first_entry_id = List.assoc_opt "recorded-first-entry-id" pairs in
+           
+           (* Check if this is a FULL response *)
+           if List.mem_assoc "entries" pairs then
+             (* FULL mode parsing *)
+             (match parse_full_stream_info arr with
+              | Ok full_info -> Lwt.return (Ok (Full full_info))
+              | Error e -> Lwt.return (Error (Parse_error e)))
+           else
+             (* Basic response *)
+             let basic_info = {
+               length;
+               radix_tree_keys;
+               radix_tree_nodes;
+               last_generated_id;
+               max_deleted_entry_id;
+               entries_added;
+               recorded_first_entry_id;
+               groups;
+               first_entry;
+               last_entry;
+             } in
+             Lwt.return (Ok (Basic basic_info))
+       | Error e -> Lwt.return (Error (Parse_error e)))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XACK operations *)
 let xack client key group_name ids =
   let command = Commands.xack key group_name ids in
