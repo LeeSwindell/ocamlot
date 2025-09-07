@@ -310,3 +310,19 @@ let xrange client key start_id end_id ?count () =
         (Error
            (Parse_error
               ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
+let xrevrange client key end_id start_id ?count () =
+  let command = Commands.xrevrange key end_id start_id ?count () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some entries)) ->
+      (match parse_stream_entries entries with
+       | Ok parsed_entries -> Lwt.return (Ok parsed_entries)
+       | Error msg -> Lwt.return (Error (Parse_error msg)))
+  | Ok (Resp3.Array None) -> Lwt.return (Ok [])
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )

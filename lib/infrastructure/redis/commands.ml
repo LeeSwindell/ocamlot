@@ -1146,9 +1146,18 @@ let xrange key start_id end_id ?count () =
   Array (Some final_cmd)
 
 (** XREVRANGE key end start [COUNT count] - Get stream range (reverse) *)
-let xrevrange _key _end_id _start_id ?count:_count () =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xrevrange key end_id start_id ?count () =
+  let base_cmd = 
+    [BulkString (Some "XREVRANGE"); 
+     BulkString (Some key); 
+     BulkString (Some end_id); 
+     BulkString (Some start_id)] in
+  let final_cmd = 
+    match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))]
+  in
+  Array (Some final_cmd)
 
 (** XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...] - Read from streams *)
 let xread ?count:_count ?block:_block _streams =

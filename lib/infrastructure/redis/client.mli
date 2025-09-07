@@ -66,6 +66,10 @@ val xrange : t -> string -> string -> string -> ?count:int -> unit -> (stream_en
 (** Get stream entries in a range. Use "-" and "+" for min/max IDs. 
     Returns list of (entry_id, field_value_pairs) *)
 
+val xrevrange : t -> string -> string -> string -> ?count:int -> unit -> (stream_entry list, client_error) result Lwt.t
+(** Get stream entries in reverse order. Arguments: key end_id start_id.
+    Use "+" and "-" for max/min IDs. Returns list of (entry_id, field_value_pairs) in reverse order *)
+
 (** {1 Low-level Operations} *)
 
 val execute :

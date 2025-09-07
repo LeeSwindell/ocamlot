@@ -2215,7 +2215,44 @@ let stream_command_tests =
       
   ; test_command_roundtrip "xrange with count roundtrip"
       (fun () -> xrange "test-stream" "1-0" "2-0" ~count:5 ())
-      (xrange "test-stream" "1-0" "2-0" ~count:5 ()) ]
+      (xrange "test-stream" "1-0" "2-0" ~count:5 ())
+  
+  (* XREVRANGE tests *)
+  ; test_command_serialization "xrevrange basic with + and -"
+      (fun () -> xrevrange "mystream" "+" "-" ())
+      "*4\r\n$9\r\nXREVRANGE\r\n$8\r\nmystream\r\n$1\r\n+\r\n$1\r\n-\r\n"
+  
+  ; test_command_serialization "xrevrange with specific IDs"
+      (fun () -> xrevrange "mystream" "1526985055069-0" "1526985054069-0" ())
+      "*4\r\n$9\r\nXREVRANGE\r\n$8\r\nmystream\r\n$15\r\n1526985055069-0\r\n$15\r\n1526985054069-0\r\n"
+  
+  ; test_command_serialization "xrevrange with COUNT"
+      (fun () -> xrevrange "mystream" "+" "-" ~count:1 ())
+      "*6\r\n$9\r\nXREVRANGE\r\n$8\r\nmystream\r\n$1\r\n+\r\n$1\r\n-\r\n$5\r\nCOUNT\r\n$1\r\n1\r\n"
+  
+  ; test_command_serialization "xrevrange with incomplete ID"
+      (fun () -> xrevrange "mystream" "1526985055069" "1526985054069" ())
+      "*4\r\n$9\r\nXREVRANGE\r\n$8\r\nmystream\r\n$13\r\n1526985055069\r\n$13\r\n1526985054069\r\n"
+  
+  ; test_command_serialization "xrevrange with exclusive range"
+      (fun () -> xrevrange "mystream" "+" "(1526985685298-0" ~count:2 ())
+      "*6\r\n$9\r\nXREVRANGE\r\n$8\r\nmystream\r\n$1\r\n+\r\n$16\r\n(1526985685298-0\r\n$5\r\nCOUNT\r\n$1\r\n2\r\n"
+  
+  ; test_command_serialization "xrevrange single entry fetch"
+      (fun () -> xrevrange "mystream" "1526984818136-0" "1526984818136-0" ())
+      "*4\r\n$9\r\nXREVRANGE\r\n$8\r\nmystream\r\n$15\r\n1526984818136-0\r\n$15\r\n1526984818136-0\r\n"
+  
+  ; test_command_serialization "xrevrange with unicode key"
+      (fun () -> xrevrange "ストリーム" "+" "-" ~count:5 ())
+      "*6\r\n$9\r\nXREVRANGE\r\n$15\r\nストリーム\r\n$1\r\n+\r\n$1\r\n-\r\n$5\r\nCOUNT\r\n$1\r\n5\r\n"
+  
+  ; test_command_roundtrip "xrevrange command roundtrip"
+      (fun () -> xrevrange "test-stream" "+" "-" ())
+      (xrevrange "test-stream" "+" "-" ())
+      
+  ; test_command_roundtrip "xrevrange with count roundtrip"
+      (fun () -> xrevrange "test-stream" "2-0" "1-0" ~count:3 ())
+      (xrevrange "test-stream" "2-0" "1-0" ~count:3 ()) ]
 
 (* Pub/Sub Commands *)
 let pubsub_command_tests =

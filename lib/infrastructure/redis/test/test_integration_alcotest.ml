@@ -248,11 +248,30 @@ let test_stream_operations _switch () =
                                      let* xrange_count_result = Client.xrange client "alcotest_stream" "-" "+" ~count:1 () in
                                      (match xrange_count_result with
                                       | Error e -> Lwt.return (Error e)
-                                      | Ok limited_entries ->
+                                      | Ok limited_entries -> (
                                           check int_testable "XRANGE with COUNT 1 should return 1 entry" 1 (List.length limited_entries) ;
-                                          (* Clean up *)
-                                          let* _ = Client.del client ["alcotest_stream"] in
-                                          Lwt.return (Ok ()))
+                                          (* Test XREVRANGE to get all entries in reverse order *)
+                                          let* xrevrange_result = Client.xrevrange client "alcotest_stream" "+" "-" () in
+                                          (match xrevrange_result with
+                                           | Error e -> Lwt.return (Error e)
+                                           | Ok rev_entries -> (
+                                               check int_testable "XREVRANGE should return 2 entries" 2 (List.length rev_entries) ;
+                                               (* Verify reverse order - compare first entry from XREVRANGE with last from XRANGE *)
+                                               (match (rev_entries, entries) with
+                                                | (rev_first_id, _) :: _, (_ , _) :: (second_id, _) :: _ ->
+                                                    (* In reverse order, the first entry should be the latest (second) one *)
+                                                    check string "XREVRANGE first entry should be latest entry" second_id rev_first_id ;
+                                                    (* Test XREVRANGE with COUNT *)
+                                                    let* xrevrange_count_result = Client.xrevrange client "alcotest_stream" "+" "-" ~count:1 () in
+                                                    (match xrevrange_count_result with
+                                                     | Error e -> Lwt.return (Error e)
+                                                     | Ok rev_limited_entries ->
+                                                         check int_testable "XREVRANGE with COUNT 1 should return 1 entry" 1 (List.length rev_limited_entries) ;
+                                                         (* Clean up *)
+                                                         let* _ = Client.del client ["alcotest_stream"] in
+                                                         Lwt.return (Ok ()))
+                                                | _ -> 
+                                                    Lwt.return (Error (Client.Parse_error "Unexpected entry structure for comparison"))) ) ) ) )
                                  | _ -> 
                                      Lwt.return (Error (Client.Parse_error "Unexpected entries structure"))) ) ) ) ) ) ) )
   in
@@ -321,7 +340,7 @@ let integration_info_tests =
 
 let integration_stream_tests =
   if check_redis_available () then
-    [test_case "stream operations (XLEN, XRANGE)" `Quick test_stream_operations]
+    [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
