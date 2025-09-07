@@ -3,6 +3,36 @@ open Alcotest
 open Alcotest_lwt
 module Client = Ocamlot_infrastructure_redis.Client
 module Connection = Ocamlot_infrastructure_redis.Connection
+module Resp3 = Ocamlot_infrastructure_redis.Resp3
+
+(* Pipeline test helpers *)
+type test_state = {
+  client: Client.t;
+  stream_ids: string list;
+  entries: (string * (string * string) list) list;
+}
+
+type test_step = test_state -> (unit * test_state, Client.client_error) result Lwt.t
+
+let (>>=?) m f =
+  let* result = m in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (value, state) -> f value state
+
+let return_ok value state = Lwt.return (Ok (value, state))
+
+let run_test_pipeline client steps =
+  let initial_state = {client; stream_ids = []; entries = []} in
+  let rec run state = function
+    | [] -> Lwt.return (Ok ((), state))
+    | step :: rest ->
+        let* result = step state in
+        match result with
+        | Error e -> Lwt.return (Error e)
+        | Ok (_, next_state) -> run next_state rest
+  in
+  run initial_state steps
 
 (* Helper to check if string contains substring *)
 let rec contains_s haystack needle =
@@ -20,6 +50,142 @@ let show_client_error = function
   | Client.Pool_exhausted -> "Pool exhausted"
   | Client.Redis_error msg -> "Redis error: " ^ msg
   | Client.Parse_error msg -> "Parse error: " ^ msg
+
+(* Pipeline test step functions *)
+let setup_clean_stream stream_name state =
+  let* result = Client.del state.client [stream_name] in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok _ -> return_ok () state
+
+let test_xlen_empty stream_name expected_count state =
+  let* result = Client.xlen state.client stream_name in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      check int ("XLEN on empty " ^ stream_name) expected_count count ;
+      return_ok () state
+
+let test_xrange_empty stream_name state =
+  let* result = Client.xrange state.client stream_name "-" "+" () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok entries ->
+      check (list (pair string (list (pair string string)))) 
+        ("XRANGE on empty " ^ stream_name) [] entries ;
+      return_ok () state
+
+let add_stream_entry stream_name fields state =
+  let xadd_cmd = Ocamlot_infrastructure_redis.Commands.xadd stream_name "*" fields () in
+  let* result = Client.execute state.client xadd_cmd in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.BulkString (Some entry_id)) ->
+      let new_entry = (entry_id, fields) in
+      let updated_state = {state with entries = new_entry :: state.entries} in
+      return_ok () updated_state
+  | Ok _ -> Lwt.return (Error (Client.Parse_error "Expected BulkString ID from XADD"))
+
+let test_xlen_populated stream_name expected_count state =
+  let* result = Client.xlen state.client stream_name in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      check int ("XLEN on populated " ^ stream_name) expected_count count ;
+      return_ok () state
+
+let test_xrange_all stream_name expected_count state =
+  let* result = Client.xrange state.client stream_name "-" "+" () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok entries ->
+      check int ("XRANGE entry count for " ^ stream_name) expected_count (List.length entries) ;
+      return_ok () state
+
+let test_xrange_with_count stream_name count expected_returned state =
+  let* result = Client.xrange state.client stream_name "-" "+" ~count () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok entries ->
+      check int ("XRANGE with COUNT " ^ string_of_int count) expected_returned (List.length entries) ;
+      return_ok () state
+
+let test_xrevrange_all stream_name expected_count state =
+  let* result = Client.xrevrange state.client stream_name "+" "-" () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok entries ->
+      check int ("XREVRANGE entry count for " ^ stream_name) expected_count (List.length entries) ;
+      return_ok () state
+
+let test_xrevrange_with_count stream_name count expected_returned state =
+  let* result = Client.xrevrange state.client stream_name "+" "-" ~count () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok entries ->
+      check int ("XREVRANGE with COUNT " ^ string_of_int count) expected_returned (List.length entries) ;
+      return_ok () state
+
+let cleanup_stream stream_name state =
+  let* result = Client.del state.client [stream_name] in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok _ -> return_ok () state
+
+(* XREAD-specific pipeline functions *)
+let setup_multiple_streams stream_names state =
+  let* result = Client.del state.client stream_names in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok _ -> return_ok () {state with stream_ids = stream_names}
+
+let test_xread_empty streams expected_empty_result state =
+  let* result = Client.xread state.client streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      check (list (pair string (list (pair string (list (pair string string))))))
+        "XREAD on empty streams" expected_empty_result xread_result ;
+      return_ok () state
+
+let add_xread_entry stream_name fields state =
+  let xadd_cmd = Ocamlot_infrastructure_redis.Commands.xadd stream_name "*" fields () in
+  let* result = Client.execute state.client xadd_cmd in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.BulkString (Some _entry_id)) ->
+      return_ok () state
+  | Ok _ -> Lwt.return (Error (Client.Parse_error "Expected BulkString ID from XADD"))
+
+let test_xread_basic streams expected_stream_count state =
+  let* result = Client.xread state.client streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      check int ("XREAD should return " ^ string_of_int expected_stream_count ^ " streams") 
+        expected_stream_count (List.length xread_result) ;
+      return_ok () state
+
+let test_xread_with_count streams count expected_entry_count state =
+  let* result = Client.xread state.client ~count streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      (match xread_result with
+       | (_, entries) :: _ ->
+           check int ("XREAD with COUNT " ^ string_of_int count) 
+             expected_entry_count (List.length entries) ;
+           return_ok () state
+       | [] -> return_ok () state)
+
+let test_xread_continuation streams expected_new_entries state =
+  let* result = Client.xread state.client streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      check int "XREAD continuation should return new entries"
+        expected_new_entries (List.fold_left (fun acc (_, entries) -> acc + List.length entries) 0 xread_result) ;
+      return_ok () state
 
 let test_config =
   { Client.host= "127.0.0.1"
@@ -188,98 +354,46 @@ let test_info_command _switch () =
       fail (Printf.sprintf "INFO command failed: %s" (show_client_error e))
 
 let test_stream_operations _switch () =
-  let* result =
-    Client.with_client test_config (fun client ->
-        (* First, clean up any existing test stream *)
-        let* _ = Client.del client ["alcotest_stream"] in
-        (* Test XLEN on non-existent stream *)
-        let* xlen_empty_result = Client.xlen client "alcotest_stream" in
-        match xlen_empty_result with
-        | Error e -> Lwt.return (Error e)
-        | Ok count -> (
-            check int_testable "XLEN on non-existent stream should return 0" 0
-              count ;
-            (* Test XRANGE on non-existent stream *)
-            let* xrange_empty_result = Client.xrange client "alcotest_stream" "-" "+" () in
-            match xrange_empty_result with
-            | Error e -> Lwt.return (Error e)
-            | Ok entries -> (
-                check (list (pair string (list (pair string string)))) "XRANGE on non-existent stream should return empty list" [] entries ;
-                (* Add entries to stream using raw execute since XADD client wrapper not implemented yet *)
-                let xadd_cmd1 =
-                  Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream" "*"
-                    [("field1", "value1"); ("field2", "value2")]
-                    ()
-                in
-                let* add_result1 = Client.execute client xadd_cmd1 in
-                match add_result1 with
-                | Error e -> Lwt.return (Error e)
-                | Ok _ -> (
-                    (* Add another entry *)
-                    let xadd_cmd2 =
-                      Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream"
-                        "*"
-                        [("field3", "value3"); ("field4", "value4")]
-                        ()
-                    in
-                    let* add_result2 = Client.execute client xadd_cmd2 in
-                    match add_result2 with
-                    | Error e -> Lwt.return (Error e)
-                    | Ok _ -> (
-                        (* Test XLEN after adding entries *)
-                        let* xlen_result = Client.xlen client "alcotest_stream" in
-                        match xlen_result with
-                        | Error e -> Lwt.return (Error e)
-                        | Ok count -> (
-                            check int_testable
-                              "XLEN after adding 2 entries should return 2" 2 count ;
-                            (* Test XRANGE to get all entries *)
-                            let* xrange_result = Client.xrange client "alcotest_stream" "-" "+" () in
-                            match xrange_result with
-                            | Error e -> Lwt.return (Error e)
-                            | Ok entries -> (
-                                check int_testable "XRANGE should return 2 entries" 2 (List.length entries) ;
-                                (* Verify the first entry has correct field-value pairs *)
-                                (match entries with
-                                 | (_, fields1) :: (_, fields2) :: _ ->
-                                     check int_testable "First entry should have 2 fields" 2 (List.length fields1) ;
-                                     check int_testable "Second entry should have 2 fields" 2 (List.length fields2) ;
-                                     (* Test XRANGE with COUNT *)
-                                     let* xrange_count_result = Client.xrange client "alcotest_stream" "-" "+" ~count:1 () in
-                                     (match xrange_count_result with
-                                      | Error e -> Lwt.return (Error e)
-                                      | Ok limited_entries -> (
-                                          check int_testable "XRANGE with COUNT 1 should return 1 entry" 1 (List.length limited_entries) ;
-                                          (* Test XREVRANGE to get all entries in reverse order *)
-                                          let* xrevrange_result = Client.xrevrange client "alcotest_stream" "+" "-" () in
-                                          (match xrevrange_result with
-                                           | Error e -> Lwt.return (Error e)
-                                           | Ok rev_entries -> (
-                                               check int_testable "XREVRANGE should return 2 entries" 2 (List.length rev_entries) ;
-                                               (* Verify reverse order - compare first entry from XREVRANGE with last from XRANGE *)
-                                               (match (rev_entries, entries) with
-                                                | (rev_first_id, _) :: _, (_ , _) :: (second_id, _) :: _ ->
-                                                    (* In reverse order, the first entry should be the latest (second) one *)
-                                                    check string "XREVRANGE first entry should be latest entry" second_id rev_first_id ;
-                                                    (* Test XREVRANGE with COUNT *)
-                                                    let* xrevrange_count_result = Client.xrevrange client "alcotest_stream" "+" "-" ~count:1 () in
-                                                    (match xrevrange_count_result with
-                                                     | Error e -> Lwt.return (Error e)
-                                                     | Ok rev_limited_entries ->
-                                                         check int_testable "XREVRANGE with COUNT 1 should return 1 entry" 1 (List.length rev_limited_entries) ;
-                                                         (* Clean up *)
-                                                         let* _ = Client.del client ["alcotest_stream"] in
-                                                         Lwt.return (Ok ()))
-                                                | _ -> 
-                                                    Lwt.return (Error (Client.Parse_error "Unexpected entry structure for comparison"))) ) ) ) )
-                                 | _ -> 
-                                     Lwt.return (Error (Client.Parse_error "Unexpected entries structure"))) ) ) ) ) ) ) )
-  in
+  let* result = Client.with_client test_config (fun client ->
+      run_test_pipeline client [
+        (fun state -> setup_clean_stream "alcotest_stream" state);
+        (fun state -> test_xlen_empty "alcotest_stream" 0 state);
+        (fun state -> test_xrange_empty "alcotest_stream" state);
+        (fun state -> add_stream_entry "alcotest_stream" [("field1", "value1"); ("field2", "value2")] state);
+        (fun state -> add_stream_entry "alcotest_stream" [("field3", "value3"); ("field4", "value4")] state);
+        (fun state -> test_xlen_populated "alcotest_stream" 2 state);
+        (fun state -> test_xrange_all "alcotest_stream" 2 state);
+        (fun state -> test_xrange_with_count "alcotest_stream" 1 1 state);
+        (fun state -> test_xrevrange_all "alcotest_stream" 2 state);
+        (fun state -> test_xrevrange_with_count "alcotest_stream" 1 1 state);
+        (fun state -> cleanup_stream "alcotest_stream" state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
   match result with
   | Ok () -> Lwt.return_unit
   | Error e ->
-      fail
-        (Printf.sprintf "Stream operations failed: %s" (show_client_error e))
+      fail (Printf.sprintf "Stream operations failed: %s" (show_client_error e))
+
+let test_xread_operations_new _switch () =
+  let* result = Client.with_client test_config (fun client ->
+      run_test_pipeline client [
+        (fun state -> setup_multiple_streams ["xread_stream1"; "xread_stream2"] state);
+        (fun state -> test_xread_empty [Client.{key="xread_stream1"; id="0-0"}] [] state);
+        (fun state -> add_xread_entry "xread_stream1" [("event", "pageview"); ("user", "john")] state);
+        (fun state -> add_xread_entry "xread_stream2" [("event", "purchase"); ("user", "jane")] state);  
+        (fun state -> add_xread_entry "xread_stream2" [("event", "login"); ("user", "alice")] state);
+        (fun state -> test_xread_basic [Client.{key="xread_stream1"; id="0-0"}; Client.{key="xread_stream2"; id="0-0"}] 2 state);
+        (fun state -> test_xread_with_count [Client.{key="xread_stream2"; id="0-0"}] 1 1 state);
+        (fun state -> add_xread_entry "xread_stream1" [("event", "logout"); ("user", "john")] state);
+        (fun state -> test_xread_continuation [Client.{key="xread_stream1"; id="$"}] 0 state);
+        (fun state -> cleanup_stream "xread_stream1" state);
+        (fun state -> cleanup_stream "xread_stream2" state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XREAD operations failed: %s" (show_client_error e))
 
 (* =============================================================================
    CONDITIONAL TEST SUITE DEFINITION
@@ -340,9 +454,13 @@ let integration_info_tests =
 
 let integration_stream_tests =
   if check_redis_available () then
-    [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations]
+    [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations;
+     test_case "xread operations" `Quick test_xread_operations_new]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xread operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 

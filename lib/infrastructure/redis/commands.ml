@@ -1159,10 +1159,43 @@ let xrevrange key end_id start_id ?count () =
   in
   Array (Some final_cmd)
 
+(** Type for XREAD stream specification *)
+type xread_stream = {
+  key: string;
+  id: string;
+}
+
 (** XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...] - Read from streams *)
-let xread ?count:_count ?block:_block _streams =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xread ?count ?block streams =
+  (* Extract keys and IDs from streams *)
+  let keys = List.map (fun s -> s.key) streams in
+  let ids = List.map (fun s -> s.id) streams in
+  
+  (* Build command starting with XREAD *)
+  let base_cmd = [BulkString (Some "XREAD")] in
+  
+  (* Add COUNT if specified *)
+  let cmd_with_count = 
+    match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))]
+  in
+  
+  (* Add BLOCK if specified (in milliseconds) *)
+  let cmd_with_block = 
+    match block with  
+    | None -> cmd_with_count
+    | Some ms -> cmd_with_count @ [BulkString (Some "BLOCK"); BulkString (Some (string_of_int ms))]
+  in
+  
+  (* Add STREAMS keyword followed by keys, then IDs *)
+  let streams_section = BulkString (Some "STREAMS") 
+    :: (List.map (fun k -> BulkString (Some k)) keys)
+    @ (List.map (fun id -> BulkString (Some id)) ids)
+  in
+  
+  let final_cmd = cmd_with_block @ streams_section in
+  Array (Some final_cmd)
 
 (** XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] ID [ID ...] - Read from stream group *)
 let xreadgroup _group_name _consumer ?count:_count ?block:_block _streams =

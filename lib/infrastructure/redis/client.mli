@@ -59,6 +59,15 @@ val info : t -> (string, client_error) result Lwt.t
 (** Stream entry: (entry_id, [(field, value); ...]) *)
 type stream_entry = string * (string * string) list
 
+(** XREAD result: [(stream_name, [entries]); ...] *)
+type xread_result = (string * stream_entry list) list
+
+(** XREAD stream specification *)
+type xread_stream = {
+  key: string;
+  id: string;
+}
+
 val xlen : t -> string -> (int, client_error) result Lwt.t
 (** Get the number of entries in a stream *)
 
@@ -69,6 +78,13 @@ val xrange : t -> string -> string -> string -> ?count:int -> unit -> (stream_en
 val xrevrange : t -> string -> string -> string -> ?count:int -> unit -> (stream_entry list, client_error) result Lwt.t
 (** Get stream entries in reverse order. Arguments: key end_id start_id.
     Use "+" and "-" for max/min IDs. Returns list of (entry_id, field_value_pairs) in reverse order *)
+
+val xread : t -> ?count:int -> ?block:int -> xread_stream list -> (xread_result, client_error) result Lwt.t
+(** Read from multiple streams. 
+    - count: max entries per stream
+    - block: timeout in milliseconds (0 = infinite)
+    - streams: list of {key; id} where id is last seen ID ("$" for new only, "0-0" for all)
+    Returns [(stream_name, entries)] for streams with new data *)
 
 (** {1 Low-level Operations} *)
 

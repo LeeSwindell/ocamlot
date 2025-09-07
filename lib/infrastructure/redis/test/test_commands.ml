@@ -2252,7 +2252,60 @@ let stream_command_tests =
       
   ; test_command_roundtrip "xrevrange with count roundtrip"
       (fun () -> xrevrange "test-stream" "2-0" "1-0" ~count:3 ())
-      (xrevrange "test-stream" "2-0" "1-0" ~count:3 ()) ]
+      (xrevrange "test-stream" "2-0" "1-0" ~count:3 ())
+  
+  (* XREAD tests *)
+  ; test_command_serialization "xread single stream from beginning"
+      (fun () -> xread [{key="mystream"; id="0-0"}])
+      "*4\r\n$5\r\nXREAD\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$3\r\n0-0\r\n"
+  
+  ; test_command_serialization "xread single stream with $ ID"
+      (fun () -> xread [{key="mystream"; id="$"}])
+      "*4\r\n$5\r\nXREAD\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$1\r\n$\r\n"
+  
+  ; test_command_serialization "xread single stream with + ID"
+      (fun () -> xread [{key="mystream"; id="+"}])
+      "*4\r\n$5\r\nXREAD\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$1\r\n+\r\n"
+  
+  ; test_command_serialization "xread multiple streams"
+      (fun () -> xread [{key="stream1"; id="1-0"}; {key="stream2"; id="2-0"}])
+      "*6\r\n$5\r\nXREAD\r\n$7\r\nSTREAMS\r\n$7\r\nstream1\r\n$7\r\nstream2\r\n$3\r\n1-0\r\n$3\r\n2-0\r\n"
+  
+  ; test_command_serialization "xread with COUNT"
+      (fun () -> xread ~count:5 [{key="mystream"; id="0-0"}])
+      "*6\r\n$5\r\nXREAD\r\n$5\r\nCOUNT\r\n$1\r\n5\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$3\r\n0-0\r\n"
+  
+  ; test_command_serialization "xread with BLOCK timeout"
+      (fun () -> xread ~block:1000 [{key="mystream"; id="$"}])
+      "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$1\r\n$\r\n"
+  
+  ; test_command_serialization "xread with COUNT and BLOCK"
+      (fun () -> xread ~count:10 ~block:5000 [{key="stream1"; id="1526999626221-0"}])
+      "*8\r\n$5\r\nXREAD\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n$5\r\nBLOCK\r\n$4\r\n5000\r\n$7\r\nSTREAMS\r\n$7\r\nstream1\r\n$15\r\n1526999626221-0\r\n"
+  
+  ; test_command_serialization "xread multiple streams with COUNT and BLOCK"
+      (fun () -> xread ~count:2 ~block:1000 [{key="writers"; id="1526985685298-0"}; {key="readers"; id="$"}])
+      "*10\r\n$5\r\nXREAD\r\n$5\r\nCOUNT\r\n$1\r\n2\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nSTREAMS\r\n$7\r\nwriters\r\n$7\r\nreaders\r\n$15\r\n1526985685298-0\r\n$1\r\n$\r\n"
+  
+  ; test_command_serialization "xread with incomplete ID"
+      (fun () -> xread [{key="mystream"; id="0"}])
+      "*4\r\n$5\r\nXREAD\r\n$7\r\nSTREAMS\r\n$8\r\nmystream\r\n$1\r\n0\r\n"
+  
+  ; test_command_serialization "xread with unicode stream key"
+      (fun () -> xread [{key="ストリーム"; id="0-0"}])
+      "*4\r\n$5\r\nXREAD\r\n$7\r\nSTREAMS\r\n$15\r\nストリーム\r\n$3\r\n0-0\r\n"
+  
+  ; test_command_serialization "xread zero timeout blocking"
+      (fun () -> xread ~block:0 [{key="queue"; id="$"}])
+      "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$1\r\n0\r\n$7\r\nSTREAMS\r\n$5\r\nqueue\r\n$1\r\n$\r\n"
+  
+  ; test_command_roundtrip "xread basic roundtrip"
+      (fun () -> xread [{key="test-stream"; id="0-0"}])
+      (xread [{key="test-stream"; id="0-0"}])
+      
+  ; test_command_roundtrip "xread multiple streams roundtrip"
+      (fun () -> xread ~count:5 ~block:2000 [{key="s1"; id="1-0"}; {key="s2"; id="$"}])
+      (xread ~count:5 ~block:2000 [{key="s1"; id="1-0"}; {key="s2"; id="$"}]) ]
 
 (* Pub/Sub Commands *)
 let pubsub_command_tests =

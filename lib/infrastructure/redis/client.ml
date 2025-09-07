@@ -275,6 +275,15 @@ let xlen client key =
 (* Type for stream entries: (entry_id * (field * value) list) *)
 type stream_entry = string * (string * string) list
 
+(* Type for XREAD results: (stream_name * stream_entries) list *)
+type xread_result = (string * stream_entry list) list
+
+(* Type for XREAD stream specification *)
+type xread_stream = {
+  key: string;
+  id: string;
+}
+
 (* Helper function to parse stream entries from RESP3 array *)
 let rec parse_stream_entries = function
   | [] -> Ok []
@@ -294,6 +303,19 @@ and parse_field_values field_values acc =
   | (Resp3.BulkString (Some field)) :: (Resp3.BulkString (Some value)) :: rest ->
       parse_field_values rest ((field, value) :: acc)
   | _ -> Error "Invalid field-value pair format"
+
+(* Helper function to parse XREAD response: [["stream1", [entries]], ["stream2", [entries]]] *)
+let rec parse_xread_response = function
+  | [] -> Ok []
+  | (Resp3.Array (Some [Resp3.BulkString (Some stream_name); Resp3.Array (Some entries)])) :: rest ->
+      (match parse_stream_entries entries with
+       | Ok parsed_entries ->
+           (match parse_xread_response rest with
+            | Ok remaining -> Ok ((stream_name, parsed_entries) :: remaining)
+            | Error e -> Error e)
+       | Error e -> Error e)
+  | stream :: _ ->
+      Error ("Invalid XREAD stream format: " ^ Resp3.show_resp_value stream)
 
 let xrange client key start_id end_id ?count () =
   let command = Commands.xrange key start_id end_id ?count () in
@@ -321,6 +343,23 @@ let xrevrange client key end_id start_id ?count () =
        | Ok parsed_entries -> Lwt.return (Ok parsed_entries)
        | Error msg -> Lwt.return (Error (Parse_error msg)))
   | Ok (Resp3.Array None) -> Lwt.return (Ok [])
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
+let xread client ?count ?block streams =
+  let commands_streams = List.map (fun {key; id} -> Commands.{key; id}) streams in
+  let command = Commands.xread ?count ?block commands_streams in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some stream_responses)) ->
+      (match parse_xread_response stream_responses with
+       | Ok parsed_streams -> Lwt.return (Ok parsed_streams)
+       | Error msg -> Lwt.return (Error (Parse_error msg)))
+  | Ok (Resp3.Array None) -> Lwt.return (Ok []) (* Timeout or no data *)
   | Ok resp ->
       Lwt.return
         (Error
