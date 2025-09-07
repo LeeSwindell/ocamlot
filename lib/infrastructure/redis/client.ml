@@ -504,6 +504,81 @@ let xinfo_consumers client key groupname =
            (Parse_error
               ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XINFO GROUPS data types and operations *)
+type group_info = {
+  name: string;
+  consumers: int;
+  pending: int;
+  last_delivered_id: string;
+  entries_read: int;
+  lag: int option; (* NULL when lag can't be determined *)
+}
+
+let parse_group_info_array arr =
+  let rec parse_pairs acc = function
+    | (Resp3.BulkString (Some "name")) :: (Resp3.BulkString (Some name)) :: rest ->
+        parse_pairs (("name", name) :: acc) rest
+    | (Resp3.BulkString (Some "consumers")) :: (Resp3.Integer consumers) :: rest ->
+        parse_pairs (("consumers", Int64.to_string consumers) :: acc) rest  
+    | (Resp3.BulkString (Some "pending")) :: (Resp3.Integer pending) :: rest ->
+        parse_pairs (("pending", Int64.to_string pending) :: acc) rest
+    | (Resp3.BulkString (Some "last-delivered-id")) :: (Resp3.BulkString (Some id)) :: rest ->
+        parse_pairs (("last-delivered-id", id) :: acc) rest
+    | (Resp3.BulkString (Some "entries-read")) :: (Resp3.Integer entries_read) :: rest ->
+        parse_pairs (("entries-read", Int64.to_string entries_read) :: acc) rest
+    | (Resp3.BulkString (Some "lag")) :: (Resp3.Integer lag) :: rest ->
+        parse_pairs (("lag", Int64.to_string lag) :: acc) rest
+    | (Resp3.BulkString (Some "lag")) :: Resp3.Null :: rest ->
+        parse_pairs (("lag", "null") :: acc) rest
+    | [] -> Ok (List.rev acc)
+    | (Resp3.BulkString (Some _)) :: _ :: rest ->
+        (* Skip unknown field-value pairs *)
+        parse_pairs acc rest
+    | _ -> Error "Invalid group info format"
+  in
+  match parse_pairs [] arr with
+  | Ok pairs ->
+      let name = List.assoc_opt "name" pairs |> Option.value ~default:"" in
+      let consumers = List.assoc_opt "consumers" pairs |> Option.value ~default:"0" |> int_of_string in
+      let pending = List.assoc_opt "pending" pairs |> Option.value ~default:"0" |> int_of_string in
+      let last_delivered_id = List.assoc_opt "last-delivered-id" pairs |> Option.value ~default:"0-0" in
+      let entries_read = List.assoc_opt "entries-read" pairs |> Option.value ~default:"0" |> int_of_string in
+      let lag = 
+        match List.assoc_opt "lag" pairs with
+        | Some "null" | None -> None
+        | Some lag_str -> Some (int_of_string lag_str)
+      in
+      Ok { name; consumers; pending; last_delivered_id; entries_read; lag }
+  | Error msg -> Error msg
+
+let xinfo_groups client key =
+  let command = Commands.xinfo_groups key in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some groups)) ->
+      let parse_group = function
+        | Resp3.Array (Some group_data) ->
+            parse_group_info_array group_data
+        | resp ->
+            Error ("Expected Array for group, got " ^ Resp3.show_resp_value resp)
+      in
+      (match List.fold_right (fun group acc ->
+         match acc with
+         | Error e -> Error e
+         | Ok groups_acc ->
+             match parse_group group with
+             | Ok group_info -> Ok (group_info :: groups_acc)
+             | Error e -> Error e
+       ) groups (Ok []) with
+       | Ok group_list -> Lwt.return (Ok group_list)
+       | Error e -> Lwt.return (Error (Parse_error e)))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XACK operations *)
 let xack client key group_name ids =
   let command = Commands.xack key group_name ids in

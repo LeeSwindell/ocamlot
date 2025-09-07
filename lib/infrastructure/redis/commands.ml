@@ -1414,6 +1414,14 @@ let xinfo_consumers key groupname =
     BulkString (Some groupname)
   ])
 
+(** XINFO GROUPS key - Return information about the consumer groups of a stream *)
+let xinfo_groups key =
+  Array (Some [
+    BulkString (Some "XINFO");
+    BulkString (Some "GROUPS");
+    BulkString (Some key)
+  ])
+
 (** XDEL key ID [ID ...] - Delete stream entries *)
 let xdel key ids =
   let base_cmd = [BulkString (Some "XDEL"); BulkString (Some key)] in

@@ -168,6 +168,27 @@ val xinfo_consumers : t -> string -> string -> (consumer_info list, client_error
     inactive time (milliseconds since last successful interaction, Redis 7.2.0+).
     Available since Redis 5.0.0. *)
 
+(** Consumer group information returned by XINFO GROUPS *)
+type group_info = {
+  name: string;                (** Consumer group name *)
+  consumers: int;              (** Number of consumers in the group *)
+  pending: int;                (** Number of pending messages in the group's PEL *)
+  last_delivered_id: string;   (** ID of the last entry delivered to the group *)
+  entries_read: int;           (** Logical read counter for the group *)
+  lag: int option;             (** Number of entries waiting to be delivered (None if unavailable) *)
+}
+
+val xinfo_groups : t -> string -> (group_info list, client_error) result Lwt.t
+(** Get information about consumer groups of a stream.
+    - key: stream name
+    Returns a list of consumer group information records
+    
+    Each group record contains the group name, number of consumers, pending message count,
+    last delivered ID, logical read counter, and lag information. The lag field indicates
+    the number of entries waiting to be delivered to the group's consumers, or None when
+    this cannot be determined (e.g., when groups are created with arbitrary IDs or entries
+    were deleted). Available since Redis 5.0.0. *)
+
 val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
 (** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
     - key: stream name

@@ -2590,7 +2590,33 @@ let xgroup_command_tests =
 
   ; test_command_roundtrip "xinfo consumers with special characters roundtrip"
       (fun () -> xinfo_consumers "stream:with:colons" "group-with-dashes")
-      (xinfo_consumers "stream:with:colons" "group-with-dashes") ]
+      (xinfo_consumers "stream:with:colons" "group-with-dashes")
+
+  ; test_command_serialization "xinfo groups"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XINFO")
+             ; BulkString (Some "GROUPS")
+             ; BulkString (Some "mystream") ] ) )
+      "*3\r\n$5\r\nXINFO\r\n$6\r\nGROUPS\r\n$8\r\nmystream\r\n"
+
+  ; test_command_serialization "xinfo groups with special characters"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XINFO")
+             ; BulkString (Some "GROUPS")
+             ; BulkString (Some "stream:with:colons") ] ) )
+      "*3\r\n$5\r\nXINFO\r\n$6\r\nGROUPS\r\n$18\r\nstream:with:colons\r\n"
+
+  ; test_command_roundtrip "xinfo groups roundtrip"
+      (fun () -> xinfo_groups "mystream")
+      (xinfo_groups "mystream")
+
+  ; test_command_roundtrip "xinfo groups with special characters roundtrip"
+      (fun () -> xinfo_groups "stream:with:colons")
+      (xinfo_groups "stream:with:colons") ]
 
 (* XACK Commands *)
 let xack_command_tests =
