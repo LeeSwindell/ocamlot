@@ -1794,6 +1794,122 @@ let hyperloglog_command_tests = [
     (pfmerge "dest" ["a"; "b"; "c"; "d"; "e"; "f"]);
 ]
 
+(* Stream Commands *)
+let stream_command_tests = [
+  (* Basic XADD tests *)
+  test_command_serialization
+    "xadd with auto-generated ID"
+    (fun () -> xadd "mystream" "*" [("field1", "value1")] ())
+    "*5\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$1\r\n*\r\n$6\r\nfield1\r\n$6\r\nvalue1\r\n";
+    
+  test_command_serialization
+    "xadd with explicit ID"
+    (fun () -> xadd "mystream" "1526919030474-55" [("field1", "value1")] ())
+    "*5\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$16\r\n1526919030474-55\r\n$6\r\nfield1\r\n$6\r\nvalue1\r\n";
+    
+  test_command_serialization
+    "xadd with multiple fields"
+    (fun () -> xadd "mystream" "*" [("field1", "value1"); ("field2", "value2"); ("field3", "value3")] ())
+    "*9\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$1\r\n*\r\n$6\r\nfield1\r\n$6\r\nvalue1\r\n$6\r\nfield2\r\n$6\r\nvalue2\r\n$6\r\nfield3\r\n$6\r\nvalue3\r\n";
+    
+  test_command_serialization
+    "xadd with incomplete ID"
+    (fun () -> xadd "mystream" "1526919030474-*" [("message", "Hello")] ())
+    "*5\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$15\r\n1526919030474-*\r\n$7\r\nmessage\r\n$5\r\nHello\r\n";
+    
+  (* XADD with NOMKSTREAM option *)
+  test_command_serialization
+    "xadd with nomkstream"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~nomkstream:true ())
+    "*6\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$9\r\nNOMKSTREAM\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  (* XADD with reference handling options *)
+  test_command_serialization
+    "xadd with keepref"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~ref_handling:KeepRef ())
+    "*6\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$7\r\nKEEPREF\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  test_command_serialization
+    "xadd with delref"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~ref_handling:DelRef ())
+    "*6\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$6\r\nDELREF\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  test_command_serialization
+    "xadd with acked"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~ref_handling:Acked ())
+    "*6\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$5\r\nACKED\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  (* XADD with MAXLEN trimming *)
+  test_command_serialization
+    "xadd with maxlen exact"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~trim_strategy:(MaxLen (1000, false)) ())
+    "*8\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n=\r\n$4\r\n1000\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  test_command_serialization
+    "xadd with maxlen approximate"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~trim_strategy:(MaxLen (1000, true)) ())
+    "*8\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$4\r\n1000\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  test_command_serialization
+    "xadd with maxlen and limit"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~trim_strategy:(MaxLen (1000, true)) ~limit:10 ())
+    "*10\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$4\r\n1000\r\n$5\r\nLIMIT\r\n$2\r\n10\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  (* XADD with MINID trimming *)
+  test_command_serialization
+    "xadd with minid exact"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~trim_strategy:(MinId ("1526919030474-0", false)) ())
+    "*8\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$5\r\nMINID\r\n$1\r\n=\r\n$16\r\n1526919030474-0\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  test_command_serialization
+    "xadd with minid approximate"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~trim_strategy:(MinId ("1526919030474-0", true)) ())
+    "*8\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$5\r\nMINID\r\n$1\r\n~\r\n$16\r\n1526919030474-0\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  (* Complex XADD with multiple options *)
+  test_command_serialization
+    "xadd with nomkstream and maxlen"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~nomkstream:true ~trim_strategy:(MaxLen (100, true)) ())
+    "*9\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$9\r\nNOMKSTREAM\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$3\r\n100\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  test_command_serialization
+    "xadd with keepref and maxlen with limit"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ~ref_handling:KeepRef ~trim_strategy:(MaxLen (500, true)) ~limit:5 ())
+    "*11\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$7\r\nKEEPREF\r\n$6\r\nMAXLEN\r\n$1\r\n~\r\n$3\r\n500\r\n$5\r\nLIMIT\r\n$1\r\n5\r\n$1\r\n*\r\n$5\r\nfield\r\n$5\r\nvalue\r\n";
+    
+  (* Edge cases *)
+  test_command_serialization
+    "xadd with empty field value"
+    (fun () -> xadd "mystream" "*" [("field", "")] ())
+    "*5\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$1\r\n*\r\n$5\r\nfield\r\n$0\r\n\r\n";
+    
+  test_command_serialization
+    "xadd with special characters in field/value"
+    (fun () -> xadd "mystream" "*" [("field:1", "value\nwith\nnewlines")] ())
+    "*5\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$1\r\n*\r\n$7\r\nfield:1\r\n$17\r\nvalue\nwith\nnewlines\r\n";
+    
+  test_command_serialization
+    "xadd with unicode"
+    (fun () -> xadd "mystream" "*" [("名前", "値")] ())
+    "*5\r\n$4\r\nXADD\r\n$8\r\nmystream\r\n$1\r\n*\r\n$6\r\n名前\r\n$3\r\n値\r\n";
+    
+  (* Round-trip tests *)
+  test_command_roundtrip
+    "xadd basic roundtrip"
+    (fun () -> xadd "mystream" "*" [("field", "value")] ())
+    (xadd "mystream" "*" [("field", "value")] ());
+    
+  test_command_roundtrip
+    "xadd with options roundtrip"
+    (fun () -> xadd "mystream" "*" [("f1", "v1"); ("f2", "v2")] ~nomkstream:true ~trim_strategy:(MaxLen (100, false)) ())
+    (xadd "mystream" "*" [("f1", "v1"); ("f2", "v2")] ~nomkstream:true ~trim_strategy:(MaxLen (100, false)) ());
+    
+  test_command_roundtrip
+    "xadd complex roundtrip"
+    (fun () -> xadd "stream" "1-0" [("a", "1"); ("b", "2"); ("c", "3")] ~ref_handling:DelRef ~trim_strategy:(MinId ("0-0", true)) ~limit:20 ())
+    (xadd "stream" "1-0" [("a", "1"); ("b", "2"); ("c", "3")] ~ref_handling:DelRef ~trim_strategy:(MinId ("0-0", true)) ~limit:20 ());
+]
+
 (* Pub/Sub Commands *)
 let pubsub_command_tests = [
   test_command_serialization
@@ -1849,7 +1965,8 @@ let transaction_command_tests = [
 let all_comprehensive_tests = 
   connection_server_tests @ key_management_tests @ string_command_tests @
   hash_command_tests @ list_command_tests @ redis_set_command_tests @ 
-  sorted_set_command_tests @ bitmap_command_tests @ hyperloglog_command_tests @ pubsub_command_tests @ transaction_command_tests
+  sorted_set_command_tests @ bitmap_command_tests @ hyperloglog_command_tests @ 
+  stream_command_tests @ pubsub_command_tests @ transaction_command_tests
 
 (* Combined canonical tests *)
 let all_canonical_tests = 

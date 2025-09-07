@@ -756,9 +756,61 @@ let pfmerge destkey sourcekeys =
    ============================================================================= *)
 
 (** XADD key ID field value [field value ...] - Add to stream *)
-let xadd _key _id _field_values =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+type xadd_trim_strategy = 
+  | MaxLen of int * bool  (* count, approximate *)
+  | MinId of string * bool  (* id, approximate *)
+
+type xadd_ref_handling = KeepRef | DelRef | Acked
+
+let xadd key id field_values ?nomkstream ?ref_handling ?trim_strategy ?limit () =
+  let base_cmd = [BulkString (Some "XADD"); BulkString (Some key)] in
+  
+  (* Add NOMKSTREAM if specified *)
+  let cmd_with_nomkstream = match nomkstream with
+    | Some true -> base_cmd @ [BulkString (Some "NOMKSTREAM")]
+    | _ -> base_cmd in
+  
+  (* Add reference handling option if specified *)
+  let cmd_with_ref = match ref_handling with
+    | Some KeepRef -> cmd_with_nomkstream @ [BulkString (Some "KEEPREF")]
+    | Some DelRef -> cmd_with_nomkstream @ [BulkString (Some "DELREF")]
+    | Some Acked -> cmd_with_nomkstream @ [BulkString (Some "ACKED")]
+    | None -> cmd_with_nomkstream in
+  
+  (* Add trimming strategy if specified *)
+  let cmd_with_trim = match trim_strategy with
+    | Some (MaxLen (threshold, approximate)) ->
+        let approx_str = if approximate then "~" else "=" in
+        let trim_args = [
+          BulkString (Some "MAXLEN");
+          BulkString (Some approx_str);
+          BulkString (Some (string_of_int threshold))
+        ] in
+        let trim_with_limit = match limit with
+          | Some lim -> trim_args @ [BulkString (Some "LIMIT"); BulkString (Some (string_of_int lim))]
+          | None -> trim_args in
+        cmd_with_ref @ trim_with_limit
+    | Some (MinId (threshold, approximate)) ->
+        let approx_str = if approximate then "~" else "=" in
+        let trim_args = [
+          BulkString (Some "MINID");
+          BulkString (Some approx_str);
+          BulkString (Some threshold)
+        ] in
+        let trim_with_limit = match limit with
+          | Some lim -> trim_args @ [BulkString (Some "LIMIT"); BulkString (Some (string_of_int lim))]
+          | None -> trim_args in
+        cmd_with_ref @ trim_with_limit
+    | None -> cmd_with_ref in
+  
+  (* Add the ID *)
+  let cmd_with_id = cmd_with_trim @ [BulkString (Some id)] in
+  
+  (* Add field-value pairs *)
+  let field_value_args = List.fold_right (fun (field, value) acc ->
+    BulkString (Some field) :: BulkString (Some value) :: acc) field_values [] in
+  
+  Array (Some (cmd_with_id @ field_value_args))
 
 (** XLEN key - Get stream length *)
 let xlen _key =
