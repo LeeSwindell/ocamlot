@@ -1,12 +1,12 @@
 (library
  (name risk_service)
- (libraries 
-  base 
-  lwt 
+ (libraries
+  base
+  lwt
   unix
   yojson
-  ocamlot_core_types 
-  ocamlot_core_domain 
+  ocamlot_core_types
+  ocamlot_core_domain
   ocamlot_risk_core
   ocamlot_infrastructure_nats)
  (preprocess

@@ -1,6 +1,13 @@
 (library
  (public_name ocamlot.infrastructure.messaging)
  (name ocamlot_infrastructure_messaging)
- (libraries base core lwt yojson logs ocamlot_core_types ocamlot_infrastructure_nats)
+ (libraries
+  base
+  core
+  lwt
+  yojson
+  logs
+  ocamlot_core_types
+  ocamlot_infrastructure_nats)
  (preprocess
   (pps lwt_ppx ppx_deriving.show)))

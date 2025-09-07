@@ -1,12 +1,12 @@
 (executable
  (public_name ocamlot-risk)
  (name main)
- (libraries 
-  base 
-  lwt 
+ (libraries
+  base
+  lwt
   lwt.unix
-  logs 
-  logs.fmt 
+  logs
+  logs.fmt
   fmt
   js_of_ocaml
   risk_service

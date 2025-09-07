@@ -1,13 +1,13 @@
 (executable
  (public_name ocamlot-simulator)
  (name main)
- (libraries 
-  base 
-  lwt 
+ (libraries
+  base
+  lwt
   lwt.unix
   unix
-  logs 
-  logs.fmt 
+  logs
+  logs.fmt
   fmt
   yojson
   js_of_ocaml

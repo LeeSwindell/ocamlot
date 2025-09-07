@@ -1,7 +1,7 @@
 (* Export the types *)
 type resp_value =
   | SimpleString of string
-  | SimpleError of string  
+  | SimpleError of string
   | Integer of int64
   | BulkString of string option
   | Array of resp_value list option
@@ -23,9 +23,11 @@ val parse_string : string -> (resp_value, string) result
 (* Export the raw parsing function *)
 val parse_resp : resp_value Angstrom.t
 
-val parse_resp_buffered: (unit -> string Lwt.t) -> (resp_value, string) result Lwt.t
+val parse_resp_buffered :
+  (unit -> string Lwt.t) -> (resp_value, string) result Lwt.t
 
-val parse_resp_from_channel: (Lwt_io.input_channel) -> (resp_value, string) result Lwt.t
+val parse_resp_from_channel :
+  Lwt_io.input_channel -> (resp_value, string) result Lwt.t
 
 (* Export the serialization function *)
 val serialize_resp3 : resp_value -> string

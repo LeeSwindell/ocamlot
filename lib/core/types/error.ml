@@ -1,11 +1,11 @@
 open Base
 
-type error = 
+type error =
   | Invalid_order of string
   | Risk_violation of string
   | Market_data_error of string
   | System_error of string
-  [@@deriving show]
+[@@deriving show]
 
 let error_to_string = function
   | Invalid_order msg -> "Invalid order: " ^ msg

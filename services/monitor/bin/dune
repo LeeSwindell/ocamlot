@@ -1,6 +1,15 @@
 (executable
  (public_name ocamlot-monitor)
  (name main)
- (libraries base core lwt lwt.unix yojson logs logs.fmt fmt ocamlot_core_types)
+ (libraries
+  base
+  core
+  lwt
+  lwt.unix
+  yojson
+  logs
+  logs.fmt
+  fmt
+  ocamlot_core_types)
  (preprocess
   (pps lwt_ppx)))

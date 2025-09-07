@@ -2,4 +2,5 @@
  (public_name ocamlot.infrastructure.redis)
  (name ocamlot_infrastructure_redis)
  (libraries angstrom base lwt lwt.unix zarith)
- (preprocess (pps lwt_ppx ppx_deriving.show ppx_deriving.eq)))
+ (preprocess
+  (pps lwt_ppx ppx_deriving.show ppx_deriving.eq)))
