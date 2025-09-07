@@ -409,6 +409,19 @@ let xgroup_destroy client key groupname =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+let xgroup_createconsumer client key groupname consumer =
+  let command = Commands.xgroup_createconsumer key groupname consumer in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Integer 1L) -> Lwt.return (Ok true) (* consumer created *)
+  | Ok (Resp3.Integer 0L) -> Lwt.return (Ok false) (* consumer already existed *)
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XACK operations *)
 let xack client key group_name ids =
   let command = Commands.xack key group_name ids in

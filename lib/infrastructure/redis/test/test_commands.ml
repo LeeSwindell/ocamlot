@@ -2426,6 +2426,28 @@ let xgroup_command_tests =
              ; BulkString (Some "mygroup") ] ) )
       "*4\r\n$6\r\nXGROUP\r\n$7\r\nDESTROY\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n"
 
+  ; test_command_serialization "xgroup createconsumer"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "CREATECONSUMER")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$14\r\nCREATECONSUMER\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n"
+
+  ; test_command_serialization "xgroup createconsumer with special characters"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "CREATECONSUMER")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes")
+             ; BulkString (Some "consumer_with_underscores") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$14\r\nCREATECONSUMER\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n$25\r\nconsumer_with_underscores\r\n"
+
   ; test_command_roundtrip "xgroup create basic roundtrip"
       (fun () -> xgroup_create "mystream" "mygroup" "0-0" ())
       (xgroup_create "mystream" "mygroup" "0-0" ())
@@ -2444,7 +2466,15 @@ let xgroup_command_tests =
 
   ; test_command_roundtrip "xgroup destroy roundtrip"
       (fun () -> xgroup_destroy "mystream" "mygroup")
-      (xgroup_destroy "mystream" "mygroup") ]
+      (xgroup_destroy "mystream" "mygroup")
+
+  ; test_command_roundtrip "xgroup createconsumer roundtrip"
+      (fun () -> xgroup_createconsumer "mystream" "mygroup" "consumer1")
+      (xgroup_createconsumer "mystream" "mygroup" "consumer1")
+
+  ; test_command_roundtrip "xgroup createconsumer with special characters roundtrip"
+      (fun () -> xgroup_createconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores")
+      (xgroup_createconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores") ]
 
 (* XACK Commands *)
 let xack_command_tests =

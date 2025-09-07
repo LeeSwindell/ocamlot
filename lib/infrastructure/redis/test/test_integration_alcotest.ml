@@ -1379,11 +1379,63 @@ let test_xgroup_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XGROUP operations failed: %s" (show_client_error e))
 
+(* XGROUP CREATECONSUMER Pipeline Test Functions *)
+let test_xgroup_createconsumer_new stream_name group_name consumer_name expected_created state =
+  let* result = Client.xgroup_createconsumer state.client stream_name group_name consumer_name in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok created ->
+      if created <> expected_created then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected CREATECONSUMER to return %b, got %b" expected_created created)))
+      else
+        return_ok () state
+
+let test_xgroup_createconsumer_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_createconsumer_stream_" ^ string_of_int (Random.int 10000) in
+        let group_name = "test_createconsumer_group_" ^ string_of_int (Random.int 1000) in
+        
+        run_test_pipeline client [
+          (* Setup: create stream and consumer group *)
+          (fun state -> setup_clean_stream stream_name state);
+          (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+          (fun state -> create_consumer_group group_name stream_name "0" state);
+          
+          (* Test 1: Create new consumer (should return true) *)
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer1" true state);
+          
+          (* Test 2: Try to create same consumer again (should return false) *)
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer1" false state);
+          
+          (* Test 3: Create different consumer (should return true) *)
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer2" true state);
+          
+          (* Test 4: Create consumer with special characters (should return true) *)
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer_with_underscores" true state);
+          
+          (* Test 5: Create consumer with special characters again (should return false) *)
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer_with_underscores" false state);
+          
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XGROUP CREATECONSUMER operations failed: %s" (show_client_error e))
+
 let integration_xgroup_tests =
   if check_redis_available () then
-    [test_case "xgroup operations (CREATE/DESTROY)" `Quick test_xgroup_operations]
+    [test_case "xgroup operations (CREATE/DESTROY)" `Quick test_xgroup_operations;
+     test_case "xgroup createconsumer operations" `Quick test_xgroup_createconsumer_operations]
   else
     [ test_case "xgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xgroup createconsumer operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 

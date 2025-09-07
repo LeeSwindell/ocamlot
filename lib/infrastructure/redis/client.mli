@@ -113,6 +113,16 @@ val xgroup_destroy : t -> string -> string -> (bool, client_error) result Lwt.t
     - groupname: consumer group name
     Returns true if group was destroyed, false if group didn't exist *)
 
+val xgroup_createconsumer : t -> string -> string -> string -> (bool, client_error) result Lwt.t
+(** Create a consumer in the consumer group.
+    - key: stream name
+    - groupname: consumer group name
+    - consumer: consumer name to create
+    Returns true if consumer was created, false if consumer already existed
+    
+    Note: Consumers are also created automatically when referenced by operations like XREADGROUP
+    when there is data in the stream. This command allows explicit consumer creation. *)
+
 val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
 (** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
     - key: stream name
