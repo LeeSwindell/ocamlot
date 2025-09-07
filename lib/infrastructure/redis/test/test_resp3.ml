@@ -85,6 +85,7 @@ let () =
        ; ("commands: hyperloglogs", sync_to_lwt hyperloglog_command_tests)
        ; ("commands: streams", sync_to_lwt stream_command_tests)
        ; ("commands: xgroup", sync_to_lwt xgroup_command_tests)
+       ; ("commands: xdel", sync_to_lwt xdel_command_tests)
        ; ("commands: pub/sub", sync_to_lwt pubsub_command_tests)
        ; ("commands: transactions", sync_to_lwt transaction_command_tests)
        ; (* Integration tests (conditional on Redis availability) *)

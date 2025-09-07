@@ -1273,9 +1273,10 @@ let xgroup_destroy key groupname =
      BulkString (Some groupname)])
 
 (** XDEL key ID [ID ...] - Delete stream entries *)
-let xdel _key _ids =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xdel key ids =
+  let base_cmd = [BulkString (Some "XDEL"); BulkString (Some key)] in
+  let id_args = List.map (fun id -> BulkString (Some id)) ids in
+  Array (Some (base_cmd @ id_args))
 
 (** XTRIM key MAXLEN [~] count - Trim stream *)
 let xtrim _key ~maxlen:_maxlen ?approximate:_approximate _count =

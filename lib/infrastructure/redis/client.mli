@@ -113,6 +113,12 @@ val xgroup_destroy : t -> string -> string -> (bool, client_error) result Lwt.t
     - groupname: consumer group name
     Returns true if group was destroyed, false if group didn't exist *)
 
+val xdel : t -> string -> string list -> (int, client_error) result Lwt.t
+(** Delete one or more entries from a stream.
+    - key: stream name
+    - ids: list of entry IDs to delete (e.g., ["1526985054069-0"; "1526985055000-1"])
+    Returns the number of entries that were actually deleted (may be less than requested if some IDs don't exist) *)
+
 (** {1 Low-level Operations} *)
 
 val execute :

@@ -2446,6 +2446,59 @@ let xgroup_command_tests =
       (fun () -> xgroup_destroy "mystream" "mygroup")
       (xgroup_destroy "mystream" "mygroup") ]
 
+(* XDEL Commands *)
+let xdel_command_tests =
+  [ test_command_serialization "xdel single entry"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*3\r\n$4\r\nXDEL\r\n$8\r\nmystream\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xdel multiple entries"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1") ] ) )
+      "*4\r\n$4\r\nXDEL\r\n$8\r\nmystream\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n"
+
+  ; test_command_serialization "xdel with short stream name"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDEL")
+             ; BulkString (Some "s")
+             ; BulkString (Some "0-0") ] ) )
+      "*3\r\n$4\r\nXDEL\r\n$1\r\ns\r\n$3\r\n0-0\r\n"
+
+  ; test_command_serialization "xdel many entries"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDEL")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1")
+             ; BulkString (Some "1526985056000-0") ] ) )
+      "*5\r\n$4\r\nXDEL\r\n$8\r\nmystream\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n$15\r\n1526985056000-0\r\n"
+
+  ; test_command_roundtrip "xdel single entry roundtrip"
+      (fun () -> xdel "mystream" ["1526985054069-0"])
+      (xdel "mystream" ["1526985054069-0"])
+
+  ; test_command_roundtrip "xdel multiple entries roundtrip"
+      (fun () -> xdel "mystream" ["1526985054069-0"; "1526985055000-1"])
+      (xdel "mystream" ["1526985054069-0"; "1526985055000-1"])
+
+  ; test_command_roundtrip "xdel many entries roundtrip"
+      (fun () -> xdel "mystream" ["1526985054069-0"; "1526985055000-1"; "1526985056000-0"])
+      (xdel "mystream" ["1526985054069-0"; "1526985055000-1"; "1526985056000-0"]) ]
+
 (* Pub/Sub Commands *)
 let pubsub_command_tests =
   [ test_command_serialization "publish command"
@@ -2503,7 +2556,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xdel_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)
