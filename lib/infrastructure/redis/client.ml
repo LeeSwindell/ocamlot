@@ -434,6 +434,18 @@ let xgroup_delconsumer client key groupname consumer =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+let xgroup_setid client key groupname id ?entriesread () =
+  let command = Commands.xgroup_setid key groupname id ?entriesread () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.SimpleString "OK") -> Lwt.return (Ok ())
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected SimpleString OK, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XACK operations *)
 let xack client key group_name ids =
   let command = Commands.xack key group_name ids in

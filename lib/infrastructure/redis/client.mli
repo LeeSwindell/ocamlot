@@ -134,6 +134,19 @@ val xgroup_delconsumer : t -> string -> string -> string -> (int, client_error) 
     in the Pending Entries List (PEL) become available to other consumers in the group.
     Available since Redis 5.0.0. *)
 
+val xgroup_setid : t -> string -> string -> string -> ?entriesread:int -> unit -> (unit, client_error) result Lwt.t
+(** Set the last delivered ID for a consumer group.
+    - key: stream name
+    - groupname: consumer group name
+    - id: the new last delivered ID for the group ("0-0" to reprocess all, "$" for new messages only)
+    - entriesread: optional number of entries read (for consumer group lag tracking)
+    Returns unit on success
+    
+    This allows modifying the group's last delivered ID without recreating the group.
+    Useful for making consumers reprocess messages or skip to newer messages.
+    The optional entriesread parameter enables lag tracking for arbitrary IDs.
+    Available since Redis 5.0.0. *)
+
 val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
 (** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
     - key: stream name

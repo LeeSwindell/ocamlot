@@ -2504,7 +2504,65 @@ let xgroup_command_tests =
 
   ; test_command_roundtrip "xgroup delconsumer with special characters roundtrip"
       (fun () -> xgroup_delconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores")
-      (xgroup_delconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores") ]
+      (xgroup_delconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores")
+
+  ; test_command_serialization "xgroup setid basic"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "SETID")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "0-0") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$5\r\nSETID\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$3\r\n0-0\r\n"
+
+  ; test_command_serialization "xgroup setid with dollar id"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "SETID")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "$") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$5\r\nSETID\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$1\r\n$\r\n"
+
+  ; test_command_serialization "xgroup setid with entriesread"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "SETID")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "ENTRIESREAD")
+             ; BulkString (Some "100") ] ) )
+      "*7\r\n$6\r\nXGROUP\r\n$5\r\nSETID\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$15\r\n1526985054069-0\r\n$11\r\nENTRIESREAD\r\n$3\r\n100\r\n"
+
+  ; test_command_serialization "xgroup setid with special characters"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "SETID")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes")
+             ; BulkString (Some "0") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$5\r\nSETID\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n$1\r\n0\r\n"
+
+  ; test_command_roundtrip "xgroup setid basic roundtrip"
+      (fun () -> xgroup_setid "mystream" "mygroup" "0-0" ())
+      (xgroup_setid "mystream" "mygroup" "0-0" ())
+
+  ; test_command_roundtrip "xgroup setid with entriesread roundtrip"
+      (fun () -> xgroup_setid "mystream" "mygroup" "1526985054069-0" ~entriesread:100 ())
+      (xgroup_setid "mystream" "mygroup" "1526985054069-0" ~entriesread:100 ())
+
+  ; test_command_roundtrip "xgroup setid with special characters roundtrip"
+      (fun () -> xgroup_setid "stream:with:colons" "group-with-dashes" "$" ())
+      (xgroup_setid "stream:with:colons" "group-with-dashes" "$" ()) ]
 
 (* XACK Commands *)
 let xack_command_tests =

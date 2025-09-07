@@ -1387,6 +1387,24 @@ let xgroup_delconsumer key groupname consumer =
      BulkString (Some groupname);
      BulkString (Some consumer)])
 
+(** XGROUP SETID key group id [ENTRIESREAD entries-read] - Set the last delivered ID for a consumer group *)
+let xgroup_setid key groupname id ?entriesread () =
+  let base_cmd = [
+    BulkString (Some "XGROUP");
+    BulkString (Some "SETID");
+    BulkString (Some key);
+    BulkString (Some groupname);
+    BulkString (Some id)
+  ] in
+  let cmd_with_entriesread = match entriesread with
+    | None -> base_cmd
+    | Some count -> base_cmd @ [
+        BulkString (Some "ENTRIESREAD");
+        BulkString (Some (string_of_int count))
+      ]
+  in
+  Array (Some cmd_with_entriesread)
+
 (** XDEL key ID [ID ...] - Delete stream entries *)
 let xdel key ids =
   let base_cmd = [BulkString (Some "XDEL"); BulkString (Some key)] in

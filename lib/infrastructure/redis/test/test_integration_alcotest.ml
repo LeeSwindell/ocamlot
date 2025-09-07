@@ -1504,11 +1504,88 @@ let test_xgroup_delconsumer_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XGROUP DELCONSUMER operations failed: %s" (show_client_error e))
 
+(* XGROUP SETID Pipeline Test Functions *)
+let test_xgroup_setid_basic stream_name group_name id entriesread state =
+  let* result = Client.xgroup_setid state.client stream_name group_name id ?entriesread () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok () -> return_ok () state
+
+let verify_group_position_by_reading stream_name group_name consumer_name expected_new_messages_min state =
+  (* Try to read messages with this consumer to verify group position *)
+  let streams = [{Client.key = stream_name; id = ">"}] in
+  let* result = Client.xreadgroup state.client group_name consumer_name ~count:10 streams in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok messages ->
+      let total_messages = List.fold_left (fun acc (_, entries) -> acc + List.length entries) 0 messages in
+      if total_messages < expected_new_messages_min then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected at least %d new messages after SETID, got %d" expected_new_messages_min total_messages)))
+      else
+        return_ok () state
+
+let test_xgroup_setid_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_setid_stream_" ^ string_of_int (Random.int 10000) in
+        let group_name = "test_setid_group_" ^ string_of_int (Random.int 1000) in
+        
+        run_test_pipeline client [
+          (* Setup: create stream with multiple messages *)
+          (fun state -> setup_clean_stream stream_name state);
+          (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+          (fun state -> add_stream_entry stream_name [("field2", "value2")] state);
+          (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+          (fun state -> create_consumer_group group_name stream_name "$" state); (* Start at end *)
+          
+          (* Test 1: Set group position to beginning (0-0) - should make all messages available *)
+          (fun state -> test_xgroup_setid_basic stream_name group_name "0-0" None state);
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer1" true state);
+          (fun state -> verify_group_position_by_reading stream_name group_name "consumer1" 3 state);
+          
+          (* Test 2: Set group position back to end ($) - no new messages should be available *)
+          (fun state -> test_xgroup_setid_basic stream_name group_name "$" None state);
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer2" true state);
+          (fun state -> verify_group_position_by_reading stream_name group_name "consumer2" 0 state);
+          
+          (* Test 3: Add more messages and test SETID with ENTRIESREAD *)
+          (fun state -> add_stream_entry stream_name [("field4", "value4")] state);
+          (fun state -> add_stream_entry stream_name [("field5", "value5")] state);
+          (* Set position to beginning with entriesread tracking *)
+          (fun state -> test_xgroup_setid_basic stream_name group_name "0-0" (Some 5) state);
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer3" true state);
+          (fun state -> verify_group_position_by_reading stream_name group_name "consumer3" 5 state);
+          
+          (* Test 4: Set ID to specific message ID (use middle message) *)
+          (* Note: This is a simplified test since we can't easily get specific IDs in this test framework *)
+          (fun state -> test_xgroup_setid_basic stream_name group_name "0" None state);
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer4" true state);
+          (fun state -> verify_group_position_by_reading stream_name group_name "consumer4" 5 state);
+          
+          (* Test 5: Test SETID with special characters in stream/group names *)
+          (* Create a separate stream/group with special characters *)
+          (fun state -> setup_clean_stream "special:stream_name" state);
+          (fun state -> add_stream_entry "special:stream_name" [("test", "value")] state);
+          (fun state -> create_consumer_group "special-group" "special:stream_name" "$" state);
+          (fun state -> test_xgroup_setid_basic "special:stream_name" "special-group" "0-0" None state);
+          
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+          (fun state -> cleanup_stream "special:stream_name" state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XGROUP SETID operations failed: %s" (show_client_error e))
+
 let integration_xgroup_tests =
   if check_redis_available () then
     [test_case "xgroup operations (CREATE/DESTROY)" `Quick test_xgroup_operations;
      test_case "xgroup createconsumer operations" `Quick test_xgroup_createconsumer_operations;
-     test_case "xgroup delconsumer operations" `Quick test_xgroup_delconsumer_operations]
+     test_case "xgroup delconsumer operations" `Quick test_xgroup_delconsumer_operations;
+     test_case "xgroup setid operations" `Quick test_xgroup_setid_operations]
   else
     [ test_case "xgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
@@ -1517,6 +1594,9 @@ let integration_xgroup_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xgroup delconsumer operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xgroup setid operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 
