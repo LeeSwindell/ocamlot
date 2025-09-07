@@ -1061,6 +1061,42 @@ let xack key group_name ids =
   let id_args = List.map (fun id -> BulkString (Some id)) ids in
   Array (Some (base_cmd @ id_args))
 
+(** XPENDING key group [[IDLE min-idle-time] start end count [consumer]] - View pending messages *)
+type xpending_range = 
+  | Summary (* Just key and group - returns summary *)
+  | Extended of {
+      start: string;
+      end_: string;
+      count: int;
+      consumer: string option;
+      idle: int option;
+    } (* Extended form with range and optional parameters *)
+
+let xpending key group_name ?(range=Summary) () =
+  let base_cmd = [BulkString (Some "XPENDING"); BulkString (Some key); BulkString (Some group_name)] in
+  match range with
+  | Summary -> Array (Some base_cmd)
+  | Extended {start; end_; count; consumer; idle} ->
+      (* Add IDLE filter if specified *)
+      let cmd_with_idle = 
+        match idle with
+        | None -> base_cmd
+        | Some idle_ms -> base_cmd @ [BulkString (Some "IDLE"); BulkString (Some (string_of_int idle_ms))]
+      in
+      (* Add range parameters *)
+      let cmd_with_range = cmd_with_idle @ [
+        BulkString (Some start);
+        BulkString (Some end_);
+        BulkString (Some (string_of_int count))
+      ] in
+      (* Add consumer filter if specified *)
+      let final_cmd =
+        match consumer with
+        | None -> cmd_with_range
+        | Some consumer_name -> cmd_with_range @ [BulkString (Some consumer_name)]
+      in
+      Array (Some final_cmd)
+
 (** XADD key ID field value [field value ...] - Add to stream *)
 type xadd_trim_strategy =
   | MaxLen of int * bool (* count, approximate *)

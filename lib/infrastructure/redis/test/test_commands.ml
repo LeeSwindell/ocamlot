@@ -2501,6 +2501,101 @@ let xack_command_tests =
       (fun () -> xack "mystream" "mygroup" [])
       (xack "mystream" "mygroup" []) ]
 
+(* XPENDING Commands *)
+let xpending_command_tests =
+  [ test_command_serialization "xpending summary form"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XPENDING")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup") ] ) )
+      "*3\r\n$8\r\nXPENDING\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n"
+
+  ; test_command_serialization "xpending extended form basic"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XPENDING")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "-")
+             ; BulkString (Some "+")
+             ; BulkString (Some "10") ] ) )
+      "*6\r\n$8\r\nXPENDING\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$1\r\n-\r\n$1\r\n+\r\n$2\r\n10\r\n"
+
+  ; test_command_serialization "xpending extended form with consumer"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XPENDING")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "-")
+             ; BulkString (Some "+")
+             ; BulkString (Some "5")
+             ; BulkString (Some "consumer1") ] ) )
+      "*7\r\n$8\r\nXPENDING\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$1\r\n-\r\n$1\r\n+\r\n$1\r\n5\r\n$9\r\nconsumer1\r\n"
+
+  ; test_command_serialization "xpending extended form with idle filter"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XPENDING")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "IDLE")
+             ; BulkString (Some "9000")
+             ; BulkString (Some "-")
+             ; BulkString (Some "+")
+             ; BulkString (Some "10") ] ) )
+      "*8\r\n$8\r\nXPENDING\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$4\r\nIDLE\r\n$4\r\n9000\r\n$1\r\n-\r\n$1\r\n+\r\n$2\r\n10\r\n"
+
+  ; test_command_serialization "xpending extended form with idle and consumer"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XPENDING")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "IDLE")
+             ; BulkString (Some "5000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1")
+             ; BulkString (Some "3")
+             ; BulkString (Some "consumer2") ] ) )
+      "*9\r\n$8\r\nXPENDING\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$4\r\nIDLE\r\n$4\r\n5000\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n$1\r\n3\r\n$9\r\nconsumer2\r\n"
+
+  ; test_command_serialization "xpending with special stream names"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XPENDING")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes") ] ) )
+      "*3\r\n$8\r\nXPENDING\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n"
+
+  (* Roundtrip tests *)
+  ; test_command_roundtrip "xpending summary roundtrip"
+      (fun () -> xpending "mystream" "mygroup" ())
+      (xpending "mystream" "mygroup" ())
+
+  ; test_command_roundtrip "xpending extended basic roundtrip"
+      (fun () -> xpending "mystream" "mygroup" ~range:(Extended {start="-"; end_="+"; count=10; consumer=None; idle=None}) ())
+      (xpending "mystream" "mygroup" ~range:(Extended {start="-"; end_="+"; count=10; consumer=None; idle=None}) ())
+
+  ; test_command_roundtrip "xpending extended with consumer roundtrip"
+      (fun () -> xpending "mystream" "mygroup" ~range:(Extended {start="-"; end_="+"; count=5; consumer=Some "consumer1"; idle=None}) ())
+      (xpending "mystream" "mygroup" ~range:(Extended {start="-"; end_="+"; count=5; consumer=Some "consumer1"; idle=None}) ())
+
+  ; test_command_roundtrip "xpending extended with idle roundtrip"
+      (fun () -> xpending "mystream" "mygroup" ~range:(Extended {start="-"; end_="+"; count=10; consumer=None; idle=Some 9000}) ())
+      (xpending "mystream" "mygroup" ~range:(Extended {start="-"; end_="+"; count=10; consumer=None; idle=Some 9000}) ())
+
+  ; test_command_roundtrip "xpending extended with all options roundtrip"
+      (fun () -> xpending "mystream" "mygroup" ~range:(Extended {start="1526985054069-0"; end_="1526985055000-1"; count=3; consumer=Some "consumer2"; idle=Some 5000}) ())
+      (xpending "mystream" "mygroup" ~range:(Extended {start="1526985054069-0"; end_="1526985055000-1"; count=3; consumer=Some "consumer2"; idle=Some 5000}) ()) ]
+
 (* XDEL Commands *)
 let xdel_command_tests =
   [ test_command_serialization "xdel single entry"
@@ -2740,7 +2835,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xpending_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)

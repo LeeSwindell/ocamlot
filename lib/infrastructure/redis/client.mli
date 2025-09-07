@@ -120,6 +120,54 @@ val xack : t -> string -> string -> string list -> (int, client_error) result Lw
     - ids: list of entry IDs to acknowledge (e.g., ["1526985054069-0"; "1526985055000-1"])
     Returns the number of messages that were successfully acknowledged *)
 
+(** {1 XPENDING Operations} *)
+
+(** XPENDING summary information *)
+type xpending_summary = {
+  count: int;                    (** Total number of pending messages *)
+  min_id: string option;         (** Smallest pending message ID (None if no pending messages) *)
+  max_id: string option;         (** Greatest pending message ID (None if no pending messages) *)
+  consumers: (string * int) list; (** List of (consumer_name, pending_count) pairs *)
+}
+
+(** XPENDING extended entry information *)
+type xpending_entry = {
+  id: string;            (** Message ID *)
+  consumer: string;      (** Consumer that owns this pending message *)
+  idle_time: int;        (** Milliseconds since last delivery *)
+  delivery_count: int;   (** Number of times this message has been delivered *)
+}
+
+(** XPENDING result type *)
+type xpending_result =
+  | Summary of xpending_summary        (** Summary form: overall PEL statistics *)
+  | Extended of xpending_entry list    (** Extended form: detailed pending message info *)
+
+val xpending : t -> string -> string -> ?range:Commands.xpending_range -> unit -> (xpending_result, client_error) result Lwt.t
+(** View pending messages in a consumer group (Pending Entries List - PEL).
+    
+    Usage forms:
+    1. Summary form: xpending client "stream" "group" () 
+       Returns overall statistics: total count, min/max IDs, and consumer list
+       
+    2. Extended form: xpending client "stream" "group" ~range:(Extended {start="-"; end_="+"; count=10; consumer=None; idle=None}) ()
+       Returns detailed information for specific pending messages
+       
+    Extended form parameters:
+    - start: starting message ID (use "-" for oldest, specific ID, or "(exclusive_id")
+    - end_: ending message ID (use "+" for newest or specific ID) 
+    - count: maximum number of entries to return
+    - consumer: optional consumer name to filter results
+    - idle: optional minimum idle time in milliseconds to filter stale messages
+    
+    Examples:
+    - Basic summary: xpending client "mystream" "mygroup" ()
+    - All pending: xpending client "stream" "group" ~range:(Extended {start="-"; end_="+"; count=100; consumer=None; idle=None}) ()
+    - Stale messages: xpending client "stream" "group" ~range:(Extended {start="-"; end_="+"; count=10; consumer=None; idle=Some 30000}) ()
+    - Consumer-specific: xpending client "stream" "group" ~range:(Extended {start="-"; end_="+"; count=50; consumer=Some "consumer1"; idle=None}) ()
+    
+    Returns Summary or Extended result based on the range parameter *)
+
 val xdel : t -> string -> string list -> (int, client_error) result Lwt.t
 (** Delete one or more entries from a stream.
     - key: stream name

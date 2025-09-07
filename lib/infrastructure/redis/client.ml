@@ -422,6 +422,107 @@ let xack client key group_name ids =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XPENDING operations *)
+
+(* Type for XPENDING summary: (count * min_id * max_id * consumers) *)
+type xpending_summary = {
+  count: int;
+  min_id: string option;
+  max_id: string option;
+  consumers: (string * int) list;
+}
+
+(* Type for XPENDING extended entry: (id * consumer * idle_time * delivery_count) *)
+type xpending_entry = {
+  id: string;
+  consumer: string;
+  idle_time: int;
+  delivery_count: int;
+}
+
+type xpending_result =
+  | Summary of xpending_summary
+  | Extended of xpending_entry list
+
+(* Helper function to parse XPENDING summary response *)
+let parse_xpending_summary = function
+  | [Resp3.Integer count; min_id_resp; max_id_resp; consumers_resp] ->
+      let min_id = match min_id_resp with
+        | Resp3.BulkString (Some id) -> Some id
+        | Resp3.BulkString None | Resp3.Null -> None
+        | _ -> None
+      in
+      let max_id = match max_id_resp with
+        | Resp3.BulkString (Some id) -> Some id
+        | Resp3.BulkString None | Resp3.Null -> None
+        | _ -> None
+      in
+      let rec parse_consumers acc = function
+        | [] -> Ok (List.rev acc)
+        | (Resp3.Array (Some [Resp3.BulkString (Some consumer_name); Resp3.BulkString (Some count_str)])) :: rest ->
+            (match int_of_string_opt count_str with
+             | Some count -> parse_consumers ((consumer_name, count) :: acc) rest
+             | None -> Error "Invalid consumer count")
+        | (Resp3.Array (Some [Resp3.BulkString (Some consumer_name); Resp3.Integer count_int])) :: rest ->
+            (* Handle case where count is returned as Integer instead of BulkString *)
+            parse_consumers ((consumer_name, Int64.to_int count_int) :: acc) rest
+        | _ -> Error "Invalid consumer format"
+      in
+      (match consumers_resp with
+       | Resp3.Array (Some consumer_pairs) ->
+           (match parse_consumers [] consumer_pairs with
+            | Ok consumers -> Ok {count = Int64.to_int count; min_id; max_id; consumers}
+            | Error msg -> Error msg)
+       | Resp3.Array None ->
+           (* Empty consumer list *)
+           Ok {count = Int64.to_int count; min_id; max_id; consumers = []}
+       | _ -> Error "Invalid consumer list format")
+  | response -> Error ("Invalid XPENDING summary format, got: " ^ 
+                       (String.concat "; " (List.map Resp3.show_resp_value response)))
+
+(* Helper function to parse XPENDING extended response *)
+let parse_xpending_extended entries =
+  let rec parse_entries acc = function
+    | [] -> Ok (List.rev acc)
+    | (Resp3.Array (Some [Resp3.BulkString (Some id); Resp3.BulkString (Some consumer); 
+                          Resp3.Integer idle_time; Resp3.Integer delivery_count])) :: rest ->
+        let entry = {
+          id;
+          consumer;
+          idle_time = Int64.to_int idle_time;
+          delivery_count = Int64.to_int delivery_count;
+        } in
+        parse_entries (entry :: acc) rest
+    | _ -> Error "Invalid XPENDING extended entry format"
+  in
+  parse_entries [] entries
+
+let xpending client key group_name ?(range=Commands.Summary) () =
+  let command = Commands.xpending key group_name ~range () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some response)) ->
+      (match range with
+       | Commands.Summary ->
+           (match parse_xpending_summary response with
+            | Ok summary -> Lwt.return (Ok (Summary summary))
+            | Error msg -> Lwt.return (Error (Parse_error msg)))
+       | Commands.Extended _ ->
+           (match parse_xpending_extended response with
+            | Ok entries -> Lwt.return (Ok (Extended entries))
+            | Error msg -> Lwt.return (Error (Parse_error msg))))
+  | Ok (Resp3.Array None) -> 
+      (* Empty result - return appropriate empty response based on range type *)
+      (match range with
+       | Commands.Summary -> Lwt.return (Ok (Summary {count = 0; min_id = None; max_id = None; consumers = []}))
+       | Commands.Extended _ -> Lwt.return (Ok (Extended [])))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XDEL operations *)
 let xdel client key ids =
   let command = Commands.xdel key ids in

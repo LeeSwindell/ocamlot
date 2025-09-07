@@ -577,6 +577,123 @@ let test_xack_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XACK operations failed: %s" (show_client_error e))
 
+(* XPENDING Pipeline Test Functions *)
+let test_xpending_summary group_name stream_name expected_count state =
+  let* result = Client.xpending state.client stream_name group_name () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.Summary summary) ->
+      check int ("XPENDING summary should show " ^ string_of_int expected_count ^ " pending messages") 
+        expected_count summary.count ;
+      return_ok () state
+  | Ok (Client.Extended _) ->
+      Lwt.return (Error (Client.Parse_error "Expected summary, got extended result"))
+
+let test_xpending_extended group_name stream_name expected_min_count state =
+  let* result = Client.xpending state.client stream_name group_name 
+                  ~range:(Ocamlot_infrastructure_redis.Commands.Extended {start="-"; end_="+"; count=10; consumer=None; idle=None}) () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.Extended entries) ->
+      check bool ("XPENDING extended should return at least " ^ string_of_int expected_min_count ^ " entries") 
+        true (List.length entries >= expected_min_count) ;
+      return_ok () state
+  | Ok (Client.Summary _) ->
+      Lwt.return (Error (Client.Parse_error "Expected extended, got summary result"))
+
+let test_xpending_with_consumer group_name stream_name consumer_name expected_found state =
+  let* result = Client.xpending state.client stream_name group_name 
+                  ~range:(Ocamlot_infrastructure_redis.Commands.Extended {start="-"; end_="+"; count=10; consumer=Some consumer_name; idle=None}) () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.Extended entries) ->
+      let consumer_entries = List.filter (fun entry -> entry.Client.consumer = consumer_name) entries in
+      if expected_found then
+        check bool ("XPENDING should find entries for consumer " ^ consumer_name) 
+          true (List.length consumer_entries > 0)
+      else
+        check int ("XPENDING should find no entries for consumer " ^ consumer_name) 
+          0 (List.length consumer_entries) ;
+      return_ok () state
+  | Ok (Client.Summary _) ->
+      Lwt.return (Error (Client.Parse_error "Expected extended, got summary result"))
+
+let test_xpending_idle_filter group_name stream_name idle_ms state =
+  let* result = Client.xpending state.client stream_name group_name 
+                  ~range:(Ocamlot_infrastructure_redis.Commands.Extended {start="-"; end_="+"; count=10; consumer=None; idle=Some idle_ms}) () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.Extended entries) ->
+      (* All returned entries should have idle_time >= idle_ms *)
+      let all_idle = List.for_all (fun entry -> entry.Client.idle_time >= idle_ms) entries in
+      check bool ("All XPENDING entries should have idle_time >= " ^ string_of_int idle_ms) 
+        true all_idle ;
+      return_ok () state
+  | Ok (Client.Summary _) ->
+      Lwt.return (Error (Client.Parse_error "Expected extended, got summary result"))
+
+let test_xpending_operations _switch () =
+  let* result = Client.with_client test_config (fun client ->
+      let stream_name = "xpending_test_stream_" ^ string_of_int (Random.int 10000) in
+      let group_name = "xpending_test_group_" ^ string_of_int (Random.int 1000) in
+      
+      run_test_pipeline client [
+        (* Setup: create stream, consumer group and add messages *)
+        (fun state -> setup_clean_stream stream_name state);
+        (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+        (fun state -> add_stream_entry stream_name [("field2", "value2")] state);  
+        (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+        (fun state -> create_consumer_group group_name stream_name "0" state);
+        
+        (* Test XPENDING summary with no pending messages initially *)
+        (fun state -> test_xpending_summary group_name stream_name 0 state);
+        
+        (* Create pending messages by reading without acknowledging *)
+        (fun state ->
+          let* result = Client.xreadgroup state.client group_name "consumer1" [Client.{key=stream_name; id=">"}] in
+          match result with
+          | Error e -> Lwt.return (Error e)
+          | Ok xread_result ->
+              (match xread_result with
+               | (_, entries) :: _ when List.length entries >= 2 ->
+                   let updated_state = {state with entries} in
+                   return_ok () updated_state
+               | _ -> return_ok () state));
+        
+        (* Test XPENDING summary with pending messages *)
+        (fun state -> test_xpending_summary group_name stream_name 3 state);
+        
+        (* Test XPENDING extended form *)
+        (fun state -> test_xpending_extended group_name stream_name 2 state);
+        
+        (* Test XPENDING with consumer filter *)
+        (fun state -> test_xpending_with_consumer group_name stream_name "consumer1" true state);
+        (fun state -> test_xpending_with_consumer group_name stream_name "nonexistent_consumer" false state);
+        
+        (* Wait briefly then test idle filter (should find messages idle > 0ms) *)
+        (fun state -> 
+          let* _ = Lwt_unix.sleep 0.001 in (* Wait 1ms *)
+          test_xpending_idle_filter group_name stream_name 0 state);
+        
+        (* Test XPENDING after acknowledging some messages *)
+        (fun state ->
+          match state.entries with
+          | (first_id, _) :: _ ->
+              let* ack_result = Client.xack state.client stream_name group_name [first_id] in
+              (match ack_result with
+               | Error e -> Lwt.return (Error e)
+               | Ok _ -> test_xpending_summary group_name stream_name 2 state)
+          | _ -> test_xpending_summary group_name stream_name 3 state);
+        
+        (* Cleanup *)
+        (fun state -> cleanup_stream stream_name state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XPENDING operations failed: %s" (show_client_error e))
+
 (* =============================================================================
    CONDITIONAL TEST SUITE DEFINITION
    ============================================================================= *)
@@ -816,6 +933,7 @@ let integration_stream_tests =
      test_case "xread operations" `Quick test_xread_operations_new;
      test_case "xreadgroup operations" `Quick test_xreadgroup_operations;
      test_case "xack operations" `Quick test_xack_operations;
+     test_case "xpending operations" `Quick test_xpending_operations;
      test_case "xdel operations" `Quick test_xdel_operations;
      test_case "xtrim operations" `Quick test_xtrim_operations]
   else
@@ -829,6 +947,9 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xack operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xpending operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xdel operations (skipped - no Redis)" `Quick (fun _switch () ->
