@@ -2596,6 +2596,189 @@ let xpending_command_tests =
       (fun () -> xpending "mystream" "mygroup" ~range:(Extended {start="1526985054069-0"; end_="1526985055000-1"; count=3; consumer=Some "consumer2"; idle=Some 5000}) ())
       (xpending "mystream" "mygroup" ~range:(Extended {start="1526985054069-0"; end_="1526985055000-1"; count=3; consumer=Some "consumer2"; idle=Some 5000}) ()) ]
 
+(* XCLAIM Commands *)
+let xclaim_command_tests =
+  [ test_command_serialization "xclaim basic"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*6\r\n$6\r\nXCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xclaim multiple ids"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer2")
+             ; BulkString (Some "1800000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1") ] ) )
+      "*7\r\n$6\r\nXCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer2\r\n$7\r\n1800000\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n"
+
+  ; test_command_serialization "xclaim with idle option"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "IDLE")
+             ; BulkString (Some "5000") ] ) )
+      "*8\r\n$6\r\nXCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$15\r\n1526985054069-0\r\n$4\r\nIDLE\r\n$4\r\n5000\r\n"
+
+  ; test_command_serialization "xclaim with justid option"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "JUSTID") ] ) )
+      "*7\r\n$6\r\nXCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$15\r\n1526985054069-0\r\n$6\r\nJUSTID\r\n"
+
+  ; test_command_serialization "xclaim with multiple options"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "IDLE")
+             ; BulkString (Some "1000")
+             ; BulkString (Some "RETRYCOUNT")
+             ; BulkString (Some "3")
+             ; BulkString (Some "FORCE") ] ) )
+      "*11\r\n$6\r\nXCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$15\r\n1526985054069-0\r\n$4\r\nIDLE\r\n$4\r\n1000\r\n$10\r\nRETRYCOUNT\r\n$1\r\n3\r\n$5\r\nFORCE\r\n"
+
+  ; test_command_serialization "xclaim with time option"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "TIME")
+             ; BulkString (Some "1609459200000") ] ) )
+      "*8\r\n$6\r\nXCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$15\r\n1526985054069-0\r\n$4\r\nTIME\r\n$13\r\n1609459200000\r\n"
+
+  (* Roundtrip tests *)
+  ; test_command_roundtrip "xclaim basic roundtrip"
+      (fun () -> xclaim "mystream" "mygroup" "consumer1" 3600000 ["1526985054069-0"] ())
+      (xclaim "mystream" "mygroup" "consumer1" 3600000 ["1526985054069-0"] ())
+
+  ; test_command_roundtrip "xclaim with options roundtrip"
+      (fun () -> xclaim "mystream" "mygroup" "consumer1" 3600000 ["1526985054069-0"] ~options:[Idle 1000; RetryCount 3; Force] ())
+      (xclaim "mystream" "mygroup" "consumer1" 3600000 ["1526985054069-0"] ~options:[Idle 1000; RetryCount 3; Force] ())
+
+  ; test_command_roundtrip "xclaim multiple ids roundtrip"
+      (fun () -> xclaim "mystream" "mygroup" "consumer2" 1800000 ["1526985054069-0"; "1526985055000-1"] ())
+      (xclaim "mystream" "mygroup" "consumer2" 1800000 ["1526985054069-0"; "1526985055000-1"] ()) ]
+
+(* XAUTOCLAIM Commands *)
+let xautoclaim_command_tests =
+  [ test_command_serialization "xautoclaim basic"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XAUTOCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "0-0") ] ) )
+      "*6\r\n$10\r\nXAUTOCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$3\r\n0-0\r\n"
+
+  ; test_command_serialization "xautoclaim with count"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XAUTOCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1")
+             ; BulkString (Some "3600000")
+             ; BulkString (Some "0-0")
+             ; BulkString (Some "COUNT")
+             ; BulkString (Some "25") ] ) )
+      "*8\r\n$10\r\nXAUTOCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n$7\r\n3600000\r\n$3\r\n0-0\r\n$5\r\nCOUNT\r\n$2\r\n25\r\n"
+
+  ; test_command_serialization "xautoclaim with justid"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XAUTOCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer2")
+             ; BulkString (Some "1800000")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "JUSTID") ] ) )
+      "*7\r\n$10\r\nXAUTOCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer2\r\n$7\r\n1800000\r\n$15\r\n1526985054069-0\r\n$6\r\nJUSTID\r\n"
+
+  ; test_command_serialization "xautoclaim with count and justid"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XAUTOCLAIM")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer3")
+             ; BulkString (Some "900000")
+             ; BulkString (Some "1526985055000-0")
+             ; BulkString (Some "COUNT")
+             ; BulkString (Some "10")
+             ; BulkString (Some "JUSTID") ] ) )
+      "*9\r\n$10\r\nXAUTOCLAIM\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer3\r\n$6\r\n900000\r\n$15\r\n1526985055000-0\r\n$5\r\nCOUNT\r\n$2\r\n10\r\n$6\r\nJUSTID\r\n"
+
+  ; test_command_serialization "xautoclaim with special stream ID"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XAUTOCLAIM")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes")
+             ; BulkString (Some "consumer_with_underscores")
+             ; BulkString (Some "5000")
+             ; BulkString (Some "(1526985054069-0") ] ) )
+      "*6\r\n$10\r\nXAUTOCLAIM\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n$25\r\nconsumer_with_underscores\r\n$4\r\n5000\r\n$16\r\n(1526985054069-0\r\n"
+
+  (* Roundtrip tests *)
+  ; test_command_roundtrip "xautoclaim basic roundtrip"
+      (fun () -> xautoclaim "mystream" "mygroup" "consumer1" 3600000 "0-0" ())
+      (xautoclaim "mystream" "mygroup" "consumer1" 3600000 "0-0" ())
+
+  ; test_command_roundtrip "xautoclaim with count roundtrip"
+      (fun () -> xautoclaim "mystream" "mygroup" "consumer1" 3600000 "0-0" ~count:(Some 25) ())
+      (xautoclaim "mystream" "mygroup" "consumer1" 3600000 "0-0" ~count:(Some 25) ())
+
+  ; test_command_roundtrip "xautoclaim with justid roundtrip"
+      (fun () -> xautoclaim "mystream" "mygroup" "consumer2" 1800000 "1526985054069-0" ~justid:true ())
+      (xautoclaim "mystream" "mygroup" "consumer2" 1800000 "1526985054069-0" ~justid:true ())
+
+  ; test_command_roundtrip "xautoclaim with all options roundtrip"
+      (fun () -> xautoclaim "mystream" "mygroup" "consumer3" 900000 "1526985055000-0" ~count:(Some 10) ~justid:true ())
+      (xautoclaim "mystream" "mygroup" "consumer3" 900000 "1526985055000-0" ~count:(Some 10) ~justid:true ()) ]
+
 (* XDEL Commands *)
 let xdel_command_tests =
   [ test_command_serialization "xdel single entry"
@@ -2835,7 +3018,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xpending_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xpending_command_tests @ xclaim_command_tests @ xautoclaim_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)

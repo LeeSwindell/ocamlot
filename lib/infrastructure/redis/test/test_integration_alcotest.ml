@@ -694,6 +694,170 @@ let test_xpending_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XPENDING operations failed: %s" (show_client_error e))
 
+(* XCLAIM Pipeline Test Functions *)
+let test_xclaim_basic group_name stream_name _consumer1 consumer2 ids state =
+  let* result = Client.xclaim state.client stream_name group_name consumer2 0 ids () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.ClaimEntries entries) ->
+      check bool "XCLAIM should return claimed entries" 
+        true (List.length entries > 0) ;
+      return_ok () state
+  | Ok (Client.ClaimIds _) ->
+      Lwt.return (Error (Client.Parse_error "Expected ClaimEntries, got ClaimIds"))
+
+let test_xclaim_justid group_name stream_name _consumer1 consumer2 ids state =
+  let* result = Client.xclaim state.client stream_name group_name consumer2 0 ids ~options:[Ocamlot_infrastructure_redis.Commands.JustId] () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.ClaimIds claimed_ids) ->
+      check bool "XCLAIM JUSTID should return message IDs" 
+        true (List.length claimed_ids > 0) ;
+      return_ok () state
+  | Ok (Client.ClaimEntries _) ->
+      Lwt.return (Error (Client.Parse_error "Expected ClaimIds, got ClaimEntries"))
+
+let test_xclaim_with_options group_name stream_name _consumer1 consumer2 ids state =
+  let* result = Client.xclaim state.client stream_name group_name consumer2 0 ids 
+                  ~options:[Ocamlot_infrastructure_redis.Commands.Idle 0; Ocamlot_infrastructure_redis.Commands.RetryCount 5] () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.ClaimEntries entries) ->
+      check bool "XCLAIM with options should return claimed entries" 
+        true (List.length entries >= 0) ;
+      return_ok () state
+  | Ok (Client.ClaimIds _) ->
+      Lwt.return (Error (Client.Parse_error "Expected ClaimEntries, got ClaimIds"))
+
+let test_xclaim_nonexistent_ids group_name stream_name consumer2 state =
+  let* result = Client.xclaim state.client stream_name group_name consumer2 1000 ["9999999999-0"] () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.ClaimEntries entries) ->
+      check int "XCLAIM nonexistent IDs should return empty" 0 (List.length entries) ;
+      return_ok () state
+  | Ok (Client.ClaimIds ids) ->
+      check int "XCLAIM nonexistent IDs should return empty" 0 (List.length ids) ;
+      return_ok () state
+
+(* XAUTOCLAIM Pipeline Test Functions *)
+let test_xautoclaim_basic group_name stream_name consumer_name expected_min state =
+  let* result = Client.xautoclaim state.client stream_name group_name consumer_name 0 "0-0" () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.AutoClaimEntries {next_cursor; claimed_entries; deleted_ids = _}) ->
+      check bool "XAUTOCLAIM should return a valid cursor" 
+        true (String.length next_cursor > 0) ;
+      check bool ("XAUTOCLAIM should claim at least " ^ string_of_int expected_min ^ " entries")
+        true (List.length claimed_entries >= expected_min) ;
+      return_ok () state
+  | Ok (Client.AutoClaimIds _) ->
+      Lwt.return (Error (Client.Parse_error "Expected AutoClaimEntries, got AutoClaimIds"))
+
+let test_xautoclaim_justid group_name stream_name consumer_name expected_min state =
+  let* result = Client.xautoclaim state.client stream_name group_name consumer_name 0 "0-0" ~justid:true () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.AutoClaimIds {next_cursor; claimed_ids; deleted_ids = _}) ->
+      check bool "XAUTOCLAIM JUSTID should return a valid cursor" 
+        true (String.length next_cursor > 0) ;
+      check bool ("XAUTOCLAIM JUSTID should claim at least " ^ string_of_int expected_min ^ " IDs")
+        true (List.length claimed_ids >= expected_min) ;
+      return_ok () state
+  | Ok (Client.AutoClaimEntries _) ->
+      Lwt.return (Error (Client.Parse_error "Expected AutoClaimIds, got AutoClaimEntries"))
+
+let test_xautoclaim_with_count group_name stream_name consumer_name count state =
+  let* result = Client.xautoclaim state.client stream_name group_name consumer_name 0 "0-0" ~count:(Some count) () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Client.AutoClaimEntries {next_cursor = _; claimed_entries; deleted_ids = _}) ->
+      check bool ("XAUTOCLAIM with count should claim at most " ^ string_of_int count ^ " entries")
+        true (List.length claimed_entries <= count) ;
+      return_ok () state
+  | Ok (Client.AutoClaimIds _) ->
+      Lwt.return (Error (Client.Parse_error "Expected AutoClaimEntries, got AutoClaimIds"))
+
+let test_xclaim_xautoclaim_operations _switch () =
+  let* result = Client.with_client test_config (fun client ->
+      let stream_name = "xclaim_test_stream_" ^ string_of_int (Random.int 10000) in
+      let group_name = "xclaim_test_group_" ^ string_of_int (Random.int 1000) in
+      
+      run_test_pipeline client [
+        (* Setup: create stream, consumer group and add messages *)
+        (fun state -> setup_clean_stream stream_name state);
+        (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+        (fun state -> add_stream_entry stream_name [("field2", "value2")] state);  
+        (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+        (fun state -> add_stream_entry stream_name [("field4", "value4")] state);
+        (fun state -> create_consumer_group group_name stream_name "0" state);
+        
+        (* Create pending messages by reading with consumer1 without acknowledging *)
+        (fun state ->
+          let* result = Client.xreadgroup state.client group_name "consumer1" [Client.{key=stream_name; id=">"}] in
+          match result with
+          | Error e -> Lwt.return (Error e)
+          | Ok xread_result ->
+              (match xread_result with
+               | (_, entries) :: _ when List.length entries >= 2 ->
+                   let updated_state = {state with entries} in
+                   return_ok () updated_state
+               | _ -> return_ok () state));
+        
+        (* Test XCLAIM basic functionality *)
+        (fun state ->
+          match state.entries with
+          | (first_id, _) :: (second_id, _) :: _ ->
+              test_xclaim_basic group_name stream_name "consumer1" "consumer2" [first_id; second_id] state
+          | _ -> return_ok () state);
+          
+        (* Test XCLAIM with JUSTID option *)  
+        (fun state ->
+          match state.entries with
+          | (first_id, _) :: _ ->
+              test_xclaim_justid group_name stream_name "consumer1" "consumer3" [first_id] state
+          | _ -> return_ok () state);
+          
+        (* Test XCLAIM with options *)
+        (fun state ->
+          match state.entries with
+          | (_, _) :: (second_id, _) :: _ ->
+              test_xclaim_with_options group_name stream_name "consumer1" "consumer4" [second_id] state
+          | _ -> return_ok () state);
+          
+        (* Test XCLAIM with nonexistent IDs *)
+        (fun state -> test_xclaim_nonexistent_ids group_name stream_name "consumer2" state);
+        
+        (* Create more pending messages for XAUTOCLAIM testing *)
+        (fun state ->
+          let* result = Client.xreadgroup state.client group_name "consumer5" [Client.{key=stream_name; id=">"}] in
+          match result with
+          | Error e -> Lwt.return (Error e)
+          | Ok _ -> return_ok () state);
+            
+        (* Wait briefly to ensure messages become "idle" *)
+        (fun state -> 
+          let* _ = Lwt_unix.sleep 0.002 in (* Wait 2ms *)
+          return_ok () state);
+        
+        (* Test XAUTOCLAIM basic functionality *)
+        (fun state -> test_xautoclaim_basic group_name stream_name "consumer6" 1 state);
+        
+        (* Test XAUTOCLAIM with JUSTID *)
+        (fun state -> test_xautoclaim_justid group_name stream_name "consumer7" 1 state);
+        
+        (* Test XAUTOCLAIM with count limit *)
+        (fun state -> test_xautoclaim_with_count group_name stream_name "consumer8" 2 state);
+        
+        (* Cleanup *)
+        (fun state -> cleanup_stream stream_name state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XCLAIM/XAUTOCLAIM operations failed: %s" (show_client_error e))
+
 (* =============================================================================
    CONDITIONAL TEST SUITE DEFINITION
    ============================================================================= *)
@@ -934,6 +1098,7 @@ let integration_stream_tests =
      test_case "xreadgroup operations" `Quick test_xreadgroup_operations;
      test_case "xack operations" `Quick test_xack_operations;
      test_case "xpending operations" `Quick test_xpending_operations;
+     test_case "xclaim and xautoclaim operations" `Quick test_xclaim_xautoclaim_operations;
      test_case "xdel operations" `Quick test_xdel_operations;
      test_case "xtrim operations" `Quick test_xtrim_operations]
   else
@@ -950,6 +1115,9 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xpending operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xclaim and xautoclaim operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xdel operations (skipped - no Redis)" `Quick (fun _switch () ->

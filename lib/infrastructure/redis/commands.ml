@@ -1097,6 +1097,61 @@ let xpending key group_name ?(range=Summary) () =
       in
       Array (Some final_cmd)
 
+(** XCLAIM key group consumer min-idle-time id [id ...] [options...] - Claim pending messages *)
+type xclaim_option = 
+  | Idle of int              (* IDLE ms - set idle time *)
+  | Time of int              (* TIME unix-time-ms - set idle time to specific unix time *)
+  | RetryCount of int        (* RETRYCOUNT count - set retry counter *)
+  | Force                    (* FORCE - create PEL entry even if not in PEL *)
+  | JustId                   (* JUSTID - return only IDs, don't increment retry counter *)
+  | LastId of string         (* LASTID lastid - internal use for AOF/replication *)
+
+let xclaim key group_name consumer min_idle_time ids ?(options=[]) () =
+  let base_cmd = [
+    BulkString (Some "XCLAIM"); 
+    BulkString (Some key); 
+    BulkString (Some group_name);
+    BulkString (Some consumer);
+    BulkString (Some (string_of_int min_idle_time))
+  ] in
+  let id_args = List.map (fun id -> BulkString (Some id)) ids in
+  let cmd_with_ids = base_cmd @ id_args in
+  (* Add optional parameters *)
+  let rec add_options acc = function
+    | [] -> acc
+    | Idle ms :: rest -> add_options (acc @ [BulkString (Some "IDLE"); BulkString (Some (string_of_int ms))]) rest
+    | Time unix_ms :: rest -> add_options (acc @ [BulkString (Some "TIME"); BulkString (Some (string_of_int unix_ms))]) rest
+    | RetryCount count :: rest -> add_options (acc @ [BulkString (Some "RETRYCOUNT"); BulkString (Some (string_of_int count))]) rest
+    | Force :: rest -> add_options (acc @ [BulkString (Some "FORCE")]) rest
+    | JustId :: rest -> add_options (acc @ [BulkString (Some "JUSTID")]) rest
+    | LastId lastid :: rest -> add_options (acc @ [BulkString (Some "LASTID"); BulkString (Some lastid)]) rest
+  in
+  let final_cmd = add_options cmd_with_ids options in
+  Array (Some final_cmd)
+
+(** XAUTOCLAIM key group consumer min-idle-time start [COUNT count] [JUSTID] - Automatically claim stale pending messages *)
+let xautoclaim key group_name consumer min_idle_time start ?(count=None) ?(justid=false) () =
+  let base_cmd = [
+    BulkString (Some "XAUTOCLAIM");
+    BulkString (Some key);
+    BulkString (Some group_name); 
+    BulkString (Some consumer);
+    BulkString (Some (string_of_int min_idle_time));
+    BulkString (Some start)
+  ] in
+  (* Add COUNT if specified *)
+  let cmd_with_count = 
+    match count with
+    | None -> base_cmd
+    | Some c -> base_cmd @ [BulkString (Some "COUNT"); BulkString (Some (string_of_int c))]
+  in
+  (* Add JUSTID if specified *)
+  let final_cmd =
+    if justid then cmd_with_count @ [BulkString (Some "JUSTID")]
+    else cmd_with_count
+  in
+  Array (Some final_cmd)
+
 (** XADD key ID field value [field value ...] - Add to stream *)
 type xadd_trim_strategy =
   | MaxLen of int * bool (* count, approximate *)

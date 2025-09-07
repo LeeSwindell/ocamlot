@@ -523,6 +523,124 @@ let xpending client key group_name ?(range=Commands.Summary) () =
            (Parse_error
               ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XCLAIM operations *)
+type xclaim_result =
+  | ClaimEntries of stream_entry list  (* Normal mode: returns stream entries *)
+  | ClaimIds of string list            (* JUSTID mode: returns only message IDs *)
+
+let xclaim client key group_name consumer min_idle_time ids ?(options=[]) () =
+  let command = Commands.xclaim key group_name consumer min_idle_time ids ~options () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some response)) ->
+      (* Check if JUSTID option was used *)
+      let has_justid = List.exists (function Commands.JustId -> true | _ -> false) options in
+      if has_justid then
+        (* JUSTID mode: response is array of strings (message IDs) *)
+        let rec parse_ids acc = function
+          | [] -> Ok (List.rev acc)
+          | (Resp3.BulkString (Some id)) :: rest -> parse_ids (id :: acc) rest
+          | _ -> Error "Invalid JUSTID response format"
+        in
+        (match parse_ids [] response with
+         | Ok ids -> Lwt.return (Ok (ClaimIds ids))
+         | Error msg -> Lwt.return (Error (Parse_error msg)))
+      else
+        (* Normal mode: response is array of stream entries *)
+        (match parse_stream_entries response with
+         | Ok entries -> Lwt.return (Ok (ClaimEntries entries))
+         | Error msg -> Lwt.return (Error (Parse_error msg)))
+  | Ok (Resp3.Array None) -> 
+      (* Empty result *)
+      let has_justid = List.exists (function Commands.JustId -> true | _ -> false) options in
+      if has_justid then Lwt.return (Ok (ClaimIds []))
+      else Lwt.return (Ok (ClaimEntries []))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
+(* XAUTOCLAIM operations *)
+type xautoclaim_result = {
+  next_cursor: string;                    (* Next cursor for subsequent calls *)
+  claimed_entries: stream_entry list;     (* Successfully claimed messages *)
+  deleted_ids: string list;               (* IDs that were deleted from PEL *)
+}
+
+type xautoclaim_justid_result = {
+  next_cursor: string;                    (* Next cursor for subsequent calls *)
+  claimed_ids: string list;               (* Successfully claimed message IDs *)
+  deleted_ids: string list;               (* IDs that were deleted from PEL *)
+}
+
+type xautoclaim_response =
+  | AutoClaimEntries of xautoclaim_result      (* Normal mode *)
+  | AutoClaimIds of xautoclaim_justid_result   (* JUSTID mode *)
+
+let xautoclaim client key group_name consumer min_idle_time start ?(count=None) ?(justid=false) () =
+  let command = Commands.xautoclaim key group_name consumer min_idle_time start ~count ~justid () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some [cursor_resp; entries_resp; deleted_resp])) ->
+      (* Parse cursor *)
+      (match cursor_resp with
+       | Resp3.BulkString (Some cursor) ->
+           (* Parse deleted IDs *)
+           let deleted_ids = match deleted_resp with
+             | Resp3.Array (Some del_array) ->
+                 let rec parse_deleted acc = function
+                   | [] -> List.rev acc
+                   | (Resp3.BulkString (Some id)) :: rest -> parse_deleted (id :: acc) rest
+                   | _ :: rest -> parse_deleted acc rest (* Skip invalid entries *)
+                 in parse_deleted [] del_array
+             | Resp3.Array None -> []
+             | _ -> []
+           in
+           if justid then
+             (* JUSTID mode: entries_resp is array of message IDs *)
+             (match entries_resp with
+              | Resp3.Array (Some id_array) ->
+                  let rec parse_ids acc = function
+                    | [] -> Ok (List.rev acc)
+                    | (Resp3.BulkString (Some id)) :: rest -> parse_ids (id :: acc) rest
+                    | _ -> Error "Invalid JUSTID entries format"
+                  in
+                  (match parse_ids [] id_array with
+                   | Ok claimed_ids -> 
+                       Lwt.return (Ok (AutoClaimIds {next_cursor = cursor; claimed_ids; deleted_ids}))
+                   | Error msg -> Lwt.return (Error (Parse_error msg)))
+              | Resp3.Array None ->
+                  Lwt.return (Ok (AutoClaimIds {next_cursor = cursor; claimed_ids = []; deleted_ids}))
+              | _ -> Lwt.return (Error (Parse_error "Invalid JUSTID entries response")))
+           else
+             (* Normal mode: entries_resp is array of stream entries *)
+             (match entries_resp with
+              | Resp3.Array (Some entry_array) ->
+                  (match parse_stream_entries entry_array with
+                   | Ok claimed_entries ->
+                       Lwt.return (Ok (AutoClaimEntries {next_cursor = cursor; claimed_entries; deleted_ids}))
+                   | Error msg -> Lwt.return (Error (Parse_error msg)))
+              | Resp3.Array None ->
+                  Lwt.return (Ok (AutoClaimEntries {next_cursor = cursor; claimed_entries = []; deleted_ids}))
+              | _ -> Lwt.return (Error (Parse_error "Invalid entries response")))
+       | _ -> Lwt.return (Error (Parse_error "Invalid cursor response")))
+  | Ok (Resp3.Array (Some _)) ->
+      Lwt.return (Error (Parse_error "XAUTOCLAIM response must have exactly 3 elements"))
+  | Ok (Resp3.Array None) ->
+      (* Empty response - shouldn't happen with XAUTOCLAIM but handle gracefully *)
+      if justid then
+        Lwt.return (Ok (AutoClaimIds {next_cursor = "0-0"; claimed_ids = []; deleted_ids = []}))
+      else
+        Lwt.return (Ok (AutoClaimEntries {next_cursor = "0-0"; claimed_entries = []; deleted_ids = []}))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XDEL operations *)
 let xdel client key ids =
   let command = Commands.xdel key ids in

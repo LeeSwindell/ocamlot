@@ -168,6 +168,104 @@ val xpending : t -> string -> string -> ?range:Commands.xpending_range -> unit -
     
     Returns Summary or Extended result based on the range parameter *)
 
+(** {1 XCLAIM Operations} *)
+
+(** XCLAIM result type - depends on JUSTID option *)
+type xclaim_result =
+  | ClaimEntries of stream_entry list  (** Normal mode: returns full stream entries with data *)
+  | ClaimIds of string list            (** JUSTID mode: returns only message IDs *)
+
+val xclaim : t -> string -> string -> string -> int -> string list -> ?options:Commands.xclaim_option list -> unit -> (xclaim_result, client_error) result Lwt.t
+(** Claim ownership of pending messages from another consumer.
+    
+    Basic usage: xclaim client "stream" "group" "new_consumer" 3600000 ["msg-id-1"; "msg-id-2"] ()
+    
+    Parameters:
+    - key: stream name
+    - group_name: consumer group name  
+    - consumer: new consumer to transfer ownership to
+    - min_idle_time: minimum idle time in milliseconds (only claim messages idle longer than this)
+    - ids: list of message IDs to attempt to claim
+    - options: optional list of XCLAIM options
+    
+    Options (Commands.xclaim_option):
+    - Idle ms: set idle time to specific milliseconds
+    - Time unix_ms: set idle time to specific Unix timestamp (milliseconds)
+    - RetryCount count: set retry counter to specific value
+    - Force: create PEL entry even if message not currently in PEL
+    - JustId: return only message IDs, don't increment retry counter (changes return type)
+    - LastId id: internal use for AOF/replication
+    
+    Returns:
+    - ClaimEntries: full stream entries (id, field-value pairs) when JUSTID not used
+    - ClaimIds: just message IDs when JUSTID option used
+    
+    Examples:
+    - Basic claim: xclaim client "stream" "group" "consumer2" 60000 ["1526985054069-0"] ()
+    - With options: xclaim client "stream" "group" "consumer2" 60000 ids ~options:[Idle 0; RetryCount 1] ()
+    - Just IDs: xclaim client "stream" "group" "consumer2" 60000 ids ~options:[JustId] () *)
+
+(** {1 XAUTOCLAIM Operations} *)
+
+(** XAUTOCLAIM result for normal mode *)
+type xautoclaim_result = {
+  next_cursor: string;                    (** Cursor for next XAUTOCLAIM call *)
+  claimed_entries: stream_entry list;     (** Successfully claimed messages *)
+  deleted_ids: string list;               (** Message IDs that were deleted from PEL *)
+}
+
+(** XAUTOCLAIM result for JUSTID mode *)
+type xautoclaim_justid_result = {
+  next_cursor: string;                    (** Cursor for next XAUTOCLAIM call *)
+  claimed_ids: string list;               (** Successfully claimed message IDs *)
+  deleted_ids: string list;               (** Message IDs that were deleted from PEL *)
+}
+
+(** XAUTOCLAIM response type - depends on justid parameter *)
+type xautoclaim_response =
+  | AutoClaimEntries of xautoclaim_result      (** Normal mode: returns full entries *)
+  | AutoClaimIds of xautoclaim_justid_result   (** JUSTID mode: returns only IDs *)
+
+val xautoclaim : t -> string -> string -> string -> int -> string -> ?count:int option -> ?justid:bool -> unit -> (xautoclaim_response, client_error) result Lwt.t
+(** Automatically claim stale pending messages using cursor-based scanning.
+    
+    This is equivalent to calling XPENDING + XCLAIM but more efficient for bulk operations.
+    
+    Basic usage: xautoclaim client "stream" "group" "consumer" 3600000 "0-0" ()
+    
+    Parameters:
+    - key: stream name
+    - group_name: consumer group name
+    - consumer: consumer to transfer ownership to  
+    - min_idle_time: minimum idle time in milliseconds
+    - start: starting cursor ("0-0" to start from beginning, or cursor from previous call)
+    - count: optional maximum number of messages to claim (default: Redis default ~100)
+    - justid: if true, return only IDs without message data (default: false)
+    
+    Returns a 3-element structure:
+    - next_cursor: use this as 'start' for subsequent calls ("0-0" means scan complete)
+    - claimed_entries/claimed_ids: successfully claimed messages
+    - deleted_ids: message IDs that were found in PEL but deleted from stream
+    
+    Scanning pattern:
+    ```
+    let rec claim_all cursor =
+      let* result = xautoclaim client "stream" "group" "consumer" 60000 cursor ~count:(Some 50) () in
+      match result with
+      | Ok (AutoClaimEntries {next_cursor; claimed_entries; _}) ->
+          (* Process claimed_entries *)
+          if next_cursor = "0-0" then 
+            (* Scan complete *) ()
+          else 
+            claim_all next_cursor
+      | Error e -> (* handle error *)
+    ```
+    
+    Examples:
+    - Basic: xautoclaim client "stream" "group" "consumer" 60000 "0-0" ()
+    - Limited: xautoclaim client "stream" "group" "consumer" 60000 cursor ~count:(Some 25) ()
+    - IDs only: xautoclaim client "stream" "group" "consumer" 60000 "0-0" ~justid:true () *)
+
 val xdel : t -> string -> string list -> (int, client_error) result Lwt.t
 (** Delete one or more entries from a stream.
     - key: stream name
