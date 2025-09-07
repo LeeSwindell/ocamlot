@@ -2832,6 +2832,115 @@ let xdel_command_tests =
       (fun () -> xdel "mystream" ["1526985054069-0"; "1526985055000-1"; "1526985056000-0"])
       (xdel "mystream" ["1526985054069-0"; "1526985055000-1"; "1526985056000-0"]) ]
 
+(* XDELEX Commands *)
+let xdelex_command_tests =
+  [ test_command_serialization "xdelex single entry default keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*6\r\n$6\r\nXDELEX\r\n$8\r\nmystream\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xdelex single entry explicit keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*6\r\n$6\r\nXDELEX\r\n$8\r\nmystream\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xdelex single entry delref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "DELREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*6\r\n$6\r\nXDELEX\r\n$8\r\nmystream\r\n$6\r\nDELREF\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xdelex single entry acked"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "ACKED")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*6\r\n$6\r\nXDELEX\r\n$8\r\nmystream\r\n$5\r\nACKED\r\n$3\r\nIDS\r\n$1\r\n1\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xdelex multiple entries keepref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "KEEPREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "2")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1") ] ) )
+      "*7\r\n$6\r\nXDELEX\r\n$8\r\nmystream\r\n$7\r\nKEEPREF\r\n$3\r\nIDS\r\n$1\r\n2\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n"
+
+  ; test_command_serialization "xdelex multiple entries delref"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "DELREF")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "3")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1")
+             ; BulkString (Some "1526985056000-0") ] ) )
+      "*8\r\n$6\r\nXDELEX\r\n$8\r\nmystream\r\n$6\r\nDELREF\r\n$3\r\nIDS\r\n$1\r\n3\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n$15\r\n1526985056000-0\r\n"
+
+  ; test_command_serialization "xdelex with short stream name"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XDELEX")
+             ; BulkString (Some "s")
+             ; BulkString (Some "ACKED")
+             ; BulkString (Some "IDS")
+             ; BulkString (Some "1")
+             ; BulkString (Some "0-0") ] ) )
+      "*6\r\n$6\r\nXDELEX\r\n$1\r\ns\r\n$5\r\nACKED\r\n$3\r\nIDS\r\n$1\r\n1\r\n$3\r\n0-0\r\n"
+
+  ; test_command_roundtrip "xdelex single entry default roundtrip"
+      (fun () -> xdelex "mystream" ["1526985054069-0"] ())
+      (xdelex "mystream" ["1526985054069-0"] ())
+
+  ; test_command_roundtrip "xdelex single entry keepref roundtrip"
+      (fun () -> xdelex "mystream" ["1526985054069-0"] ~ref_handling:Keepref ())
+      (xdelex "mystream" ["1526985054069-0"] ~ref_handling:Keepref ())
+
+  ; test_command_roundtrip "xdelex single entry delref roundtrip"
+      (fun () -> xdelex "mystream" ["1526985054069-0"] ~ref_handling:Delref ())
+      (xdelex "mystream" ["1526985054069-0"] ~ref_handling:Delref ())
+
+  ; test_command_roundtrip "xdelex single entry acked roundtrip"
+      (fun () -> xdelex "mystream" ["1526985054069-0"] ~ref_handling:Acked ())
+      (xdelex "mystream" ["1526985054069-0"] ~ref_handling:Acked ())
+
+  ; test_command_roundtrip "xdelex multiple entries delref roundtrip"
+      (fun () -> xdelex "mystream" ["1526985054069-0"; "1526985055000-1"] ~ref_handling:Delref ())
+      (xdelex "mystream" ["1526985054069-0"; "1526985055000-1"] ~ref_handling:Delref ()) ]
+
 (* XTRIM Commands *)
 let xtrim_command_tests =
   [ test_command_serialization "xtrim maxlen exact"
@@ -3018,7 +3127,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xpending_command_tests @ xclaim_command_tests @ xautoclaim_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xpending_command_tests @ xclaim_command_tests @ xautoclaim_command_tests @ xdel_command_tests @ xdelex_command_tests @ xtrim_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)

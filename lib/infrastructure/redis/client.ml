@@ -654,6 +654,35 @@ let xdel client key ids =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XDELEX operations *)  
+let xdelex client key ids ?ref_handling () =
+  let command = Commands.xdelex key ids ?ref_handling () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some elements)) ->
+      let parse_element = function
+        | Resp3.Integer i -> Ok (Int64.to_int i)
+        | resp -> Error (Parse_error ("Expected Integer in array, got " ^ Resp3.show_resp_value resp))
+      in
+      (match List.fold_right (fun elem acc ->
+         match acc with
+         | Error e -> Error e
+         | Ok acc_list ->
+           match parse_element elem with
+           | Ok value -> Ok (value :: acc_list)  
+           | Error e -> Error e
+       ) elements (Ok []) with
+       | Ok result_list -> Lwt.return (Ok result_list)
+       | Error e -> Lwt.return (Error e))
+  | Ok (Resp3.Array None) ->
+      Lwt.return (Ok [])
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XTRIM operations *)
 let xtrim client key strategy ?operator ?limit ?ref_handling () =
   let command = Commands.xtrim key strategy ?operator ?limit ?ref_handling () in

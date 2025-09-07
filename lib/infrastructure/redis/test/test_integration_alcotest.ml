@@ -999,6 +999,97 @@ let test_xdel_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XDEL operations failed: %s" (show_client_error e))
 
+(* XDELEX Pipeline Test Functions *)
+let test_xdelex_single_entry stream_name entry_id expected_result ref_handling state =
+  let* result = Client.xdelex state.client stream_name [entry_id] ~ref_handling () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok [actual_result] ->
+      if actual_result <> expected_result then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected result %d, got %d" expected_result actual_result)))
+      else
+        return_ok () state
+  | Ok results ->
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected single result, got %d results: [%s]" 
+          (List.length results) (String.concat "; " (List.map string_of_int results)))))
+
+let test_xdelex_multiple_entries stream_name entry_ids expected_results ref_handling state =
+  let* result = Client.xdelex state.client stream_name entry_ids ~ref_handling () in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok actual_results ->
+      if actual_results <> expected_results then
+        Lwt.return (Error (Client.Redis_error (Printf.sprintf "Expected results [%s], got [%s]" 
+          (String.concat "; " (List.map string_of_int expected_results))
+          (String.concat "; " (List.map string_of_int actual_results)))))
+      else
+        return_ok () state
+
+let test_xdelex_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_xdelex_stream_" ^ string_of_int (Random.int 10000) in
+        run_test_pipeline client [
+          (* Setup: Add 3 entries to test stream *)
+          (fun state -> setup_clean_stream stream_name state);
+          (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+          (fun state -> add_stream_entry stream_name [("field2", "value2")] state);
+          (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+          
+          (* Test 1: XDELEX with KEEPREF (default) - should behave like XDEL *)
+          (fun state -> 
+             let second_entry_id = match state.entries with
+             | [_; (id, _); _] -> id  (* Get middle entry ID *)
+             | _ -> failwith "Expected 3 entries in test state"
+             in
+             test_xdelex_single_entry stream_name second_entry_id 1 Ocamlot_infrastructure_redis.Commands.Keepref state);
+             
+          (* Test 2: XDELEX with DELREF - delete and clean references *)
+          (fun state ->
+             let remaining_ids = match state.entries with  
+             | [(id3, _); _; (id1, _)] -> [id1; id3]  (* First and third entries *)
+             | _ -> failwith "Expected 3 entries in test state"
+             in
+             test_xdelex_multiple_entries stream_name remaining_ids [1; 1] Ocamlot_infrastructure_redis.Commands.Delref state);
+             
+          (* Test 3: Try to delete already deleted entries (should return -1 for each) *)
+          (fun state ->
+             let all_ids = List.map fst state.entries in
+             let expected_results = List.map (fun _ -> -1) all_ids in
+             test_xdelex_multiple_entries stream_name all_ids expected_results Ocamlot_infrastructure_redis.Commands.Keepref state);
+             
+          (* Test 4: Add new entry and test mixed deletion *)
+          (fun state -> add_stream_entry stream_name [("field4", "value4")] state);
+          (fun state ->
+             let new_id = match state.entries with
+             | (id, _) :: _ -> id  (* Get the newest entry ID *)
+             | _ -> failwith "Expected at least 1 entry in test state"
+             in
+             (* Mix new ID with non-existent IDs *)
+             let mixed_ids = ["9999999999-0"; new_id; "8888888888-0"] in
+             let expected_results = [-1; 1; -1] in  (* Only new_id should be deleted *)
+             test_xdelex_multiple_entries stream_name mixed_ids expected_results Ocamlot_infrastructure_redis.Commands.Delref state);
+             
+          (* Test 5: Test ACKED option with new entries *)
+          (fun state -> add_stream_entry stream_name [("field5", "value5")] state);
+          (fun state ->
+             let new_id = match state.entries with
+             | (id, _) :: _ -> id  (* Get the newest entry ID *)
+             | _ -> failwith "Expected at least 1 entry in test state"
+             in
+             (* ACKED should not delete unacknowledged entries, so expect result depends on actual state *)
+             test_xdelex_single_entry stream_name new_id 1 Ocamlot_infrastructure_redis.Commands.Acked state);
+             
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XDELEX operations failed: %s" (show_client_error e))
+
 (* XTRIM-specific pipeline functions *)
 let test_xtrim_maxlen stream_name max_len expected_count state =
   let* result = Client.xtrim state.client stream_name (Ocamlot_infrastructure_redis.Commands.Maxlen max_len) () in
@@ -1100,6 +1191,7 @@ let integration_stream_tests =
      test_case "xpending operations" `Quick test_xpending_operations;
      test_case "xclaim and xautoclaim operations" `Quick test_xclaim_xautoclaim_operations;
      test_case "xdel operations" `Quick test_xdel_operations;
+     test_case "xdelex operations" `Quick test_xdelex_operations;
      test_case "xtrim operations" `Quick test_xtrim_operations]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
@@ -1121,6 +1213,9 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xdel operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xdelex operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xtrim operations (skipped - no Redis)" `Quick (fun _switch () ->

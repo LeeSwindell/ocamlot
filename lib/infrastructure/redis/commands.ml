@@ -1427,6 +1427,28 @@ let xtrim key strategy ?(operator=Exact) ?limit ?ref_handling () =
   
   Array (Some final_cmd)
 
+(** XDELEX key [KEEPREF | DELREF | ACKED] IDS numids id [id ...] - Extended delete with reference handling *)
+let xdelex key ids ?(ref_handling=Keepref) () =
+  let base_cmd = [BulkString (Some "XDELEX"); BulkString (Some key)] in
+  
+  (* Add reference handling option *)
+  let cmd_with_ref = 
+    base_cmd @
+    (match ref_handling with
+     | Keepref -> [BulkString (Some "KEEPREF")]
+     | Delref -> [BulkString (Some "DELREF")]
+     | Acked -> [BulkString (Some "ACKED")])
+  in
+  
+  (* Add IDS block *)
+  let numids = List.length ids in
+  let ids_block = 
+    [BulkString (Some "IDS"); BulkString (Some (string_of_int numids))] @
+    (List.map (fun id -> BulkString (Some id)) ids)
+  in
+  
+  Array (Some (cmd_with_ref @ ids_block))
+
 (* =============================================================================
    PUBSUB COMMANDS
    ============================================================================= *)
