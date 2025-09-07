@@ -422,6 +422,18 @@ let xgroup_createconsumer client key groupname consumer =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+let xgroup_delconsumer client key groupname consumer =
+  let command = Commands.xgroup_delconsumer key groupname consumer in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Integer count) -> Lwt.return (Ok (Int64.to_int count))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XACK operations *)
 let xack client key group_name ids =
   let command = Commands.xack key group_name ids in

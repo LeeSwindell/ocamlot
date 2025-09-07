@@ -1378,6 +1378,15 @@ let xgroup_createconsumer key groupname consumer =
      BulkString (Some groupname);
      BulkString (Some consumer)])
 
+(** XGROUP DELCONSUMER key group consumer - Delete a consumer from the consumer group *)
+let xgroup_delconsumer key groupname consumer =
+  Array (Some 
+    [BulkString (Some "XGROUP"); 
+     BulkString (Some "DELCONSUMER"); 
+     BulkString (Some key); 
+     BulkString (Some groupname);
+     BulkString (Some consumer)])
+
 (** XDEL key ID [ID ...] - Delete stream entries *)
 let xdel key ids =
   let base_cmd = [BulkString (Some "XDEL"); BulkString (Some key)] in

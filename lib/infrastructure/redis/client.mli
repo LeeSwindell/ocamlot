@@ -123,6 +123,17 @@ val xgroup_createconsumer : t -> string -> string -> string -> (bool, client_err
     Note: Consumers are also created automatically when referenced by operations like XREADGROUP
     when there is data in the stream. This command allows explicit consumer creation. *)
 
+val xgroup_delconsumer : t -> string -> string -> string -> (int, client_error) result Lwt.t
+(** Delete a consumer from a consumer group.
+    - key: stream name
+    - groupname: consumer group name
+    - consumer: consumer name to delete
+    Returns the number of pending messages that the deleted consumer had
+    
+    The consumer is removed from the consumer group and all its pending messages
+    in the Pending Entries List (PEL) become available to other consumers in the group.
+    Available since Redis 5.0.0. *)
+
 val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
 (** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
     - key: stream name

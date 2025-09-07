@@ -2474,7 +2474,37 @@ let xgroup_command_tests =
 
   ; test_command_roundtrip "xgroup createconsumer with special characters roundtrip"
       (fun () -> xgroup_createconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores")
-      (xgroup_createconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores") ]
+      (xgroup_createconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores")
+
+  ; test_command_serialization "xgroup delconsumer"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "DELCONSUMER")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "consumer1") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$11\r\nDELCONSUMER\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$9\r\nconsumer1\r\n"
+
+  ; test_command_serialization "xgroup delconsumer with special characters"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "DELCONSUMER")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes")
+             ; BulkString (Some "consumer_with_underscores") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$11\r\nDELCONSUMER\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n$25\r\nconsumer_with_underscores\r\n"
+
+  ; test_command_roundtrip "xgroup delconsumer roundtrip"
+      (fun () -> xgroup_delconsumer "mystream" "mygroup" "consumer1")
+      (xgroup_delconsumer "mystream" "mygroup" "consumer1")
+
+  ; test_command_roundtrip "xgroup delconsumer with special characters roundtrip"
+      (fun () -> xgroup_delconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores")
+      (xgroup_delconsumer "stream:with:colons" "group-with-dashes" "consumer_with_underscores") ]
 
 (* XACK Commands *)
 let xack_command_tests =
