@@ -409,6 +409,19 @@ let xgroup_destroy client key groupname =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XACK operations *)
+let xack client key group_name ids =
+  let command = Commands.xack key group_name ids in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Integer count) -> Lwt.return (Ok (Int64.to_int count))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XDEL operations *)
 let xdel client key ids =
   let command = Commands.xdel key ids in

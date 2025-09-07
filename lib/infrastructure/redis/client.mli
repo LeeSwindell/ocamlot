@@ -113,6 +113,13 @@ val xgroup_destroy : t -> string -> string -> (bool, client_error) result Lwt.t
     - groupname: consumer group name
     Returns true if group was destroyed, false if group didn't exist *)
 
+val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
+(** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
+    - key: stream name
+    - group_name: consumer group name
+    - ids: list of entry IDs to acknowledge (e.g., ["1526985054069-0"; "1526985055000-1"])
+    Returns the number of messages that were successfully acknowledged *)
+
 val xdel : t -> string -> string list -> (int, client_error) result Lwt.t
 (** Delete one or more entries from a stream.
     - key: stream name

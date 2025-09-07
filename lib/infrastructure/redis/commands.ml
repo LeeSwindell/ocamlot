@@ -1055,6 +1055,12 @@ let pfmerge destkey sourcekeys =
    STREAM COMMANDS
    ============================================================================= *)
 
+(** XACK key group ID [ID ...] - Acknowledge processed stream entries *)
+let xack key group_name ids =
+  let base_cmd = [BulkString (Some "XACK"); BulkString (Some key); BulkString (Some group_name)] in
+  let id_args = List.map (fun id -> BulkString (Some id)) ids in
+  Array (Some (base_cmd @ id_args))
+
 (** XADD key ID field value [field value ...] - Add to stream *)
 type xadd_trim_strategy =
   | MaxLen of int * bool (* count, approximate *)

@@ -484,6 +484,99 @@ let test_xreadgroup_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XREADGROUP operations failed: %s" (show_client_error e))
 
+(* XACK Pipeline Test Functions *)
+let test_xack_single_message group_name _consumer_name stream_name message_ids expected_count state =
+  let* result = Client.xack state.client stream_name group_name message_ids in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      check int ("XACK should acknowledge " ^ string_of_int expected_count ^ " messages") 
+        expected_count count ;
+      return_ok () state
+
+let test_xack_multiple_messages group_name stream_name message_ids expected_count state =
+  let* result = Client.xack state.client stream_name group_name message_ids in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      check int ("XACK should acknowledge " ^ string_of_int expected_count ^ " messages") 
+        expected_count count ;
+      return_ok () state
+
+let test_xack_nonexistent_message group_name stream_name nonexistent_id state =
+  let* result = Client.xack state.client stream_name group_name [nonexistent_id] in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok count ->
+      check int "XACK should return 0 for nonexistent message" 0 count ;
+      return_ok () state
+
+let create_pending_message_single group_name consumer_name stream_name _message_ids state =
+  (* Use XREADGROUP to create a pending message that won't be acknowledged *)
+  let* result = Client.xreadgroup state.client group_name consumer_name [Client.{key=stream_name; id=">"}] in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok xread_result ->
+      (match xread_result with
+       | (stream_key, entries) :: _ when stream_key = stream_name && List.length entries > 0 ->
+           (* Store the message IDs for later acknowledgment *)
+           let entry_ids = List.map (fun (entry_id, _) -> entry_id) entries in
+           return_ok entry_ids state
+       | _ -> 
+           return_ok [] state)
+
+let test_xack_operations _switch () =
+  let* result = Client.with_client test_config (fun client ->
+      let stream_name = "xack_test_stream_" ^ string_of_int (Random.int 10000) in
+      let group_name = "xack_test_group_" ^ string_of_int (Random.int 1000) in
+      
+      run_test_pipeline client [
+        (* Setup: create stream, consumer group and add messages *)
+        (fun state -> setup_clean_stream stream_name state);
+        (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+        (fun state -> add_stream_entry stream_name [("field2", "value2")] state);  
+        (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+        (fun state -> create_consumer_group group_name stream_name "0" state);
+        
+        (* Create pending messages by reading without acknowledging *)
+        (fun state ->
+          let* result = Client.xreadgroup state.client group_name "consumer1" [Client.{key=stream_name; id=">"}] in
+          match result with
+          | Error e -> Lwt.return (Error e)
+          | Ok xread_result ->
+              (match xread_result with
+               | (_, entries) :: _ when List.length entries >= 2 ->
+                   let updated_state = {state with entries} in
+                   return_ok () updated_state
+               | _ -> return_ok () state));
+        
+        (* Test XACK with single message *)
+        (fun state ->
+          if List.length state.entries > 0 then
+            let (first_id, _) = List.hd state.entries in
+            test_xack_single_message group_name "consumer1" stream_name [first_id] 1 state
+          else return_ok () state);
+          
+        (* Test XACK with multiple messages *)
+        (fun state ->
+          if List.length state.entries > 1 then
+            let remaining_entries = List.tl state.entries in
+            let remaining_ids = List.map (fun (entry_id, _) -> entry_id) remaining_entries in
+            test_xack_multiple_messages group_name stream_name remaining_ids (List.length remaining_ids) state
+          else return_ok () state);
+          
+        (* Test XACK with nonexistent message ID *)
+        (fun state -> test_xack_nonexistent_message group_name stream_name "9999999999-0" state);
+        
+        (* Cleanup *)
+        (fun state -> cleanup_stream stream_name state);
+      ] >>=? fun _ _ -> Lwt.return (Ok ())
+    ) in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XACK operations failed: %s" (show_client_error e))
+
 (* =============================================================================
    CONDITIONAL TEST SUITE DEFINITION
    ============================================================================= *)
@@ -722,6 +815,7 @@ let integration_stream_tests =
     [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations;
      test_case "xread operations" `Quick test_xread_operations_new;
      test_case "xreadgroup operations" `Quick test_xreadgroup_operations;
+     test_case "xack operations" `Quick test_xack_operations;
      test_case "xdel operations" `Quick test_xdel_operations;
      test_case "xtrim operations" `Quick test_xtrim_operations]
   else
@@ -732,6 +826,9 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xreadgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xack operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xdel operations (skipped - no Redis)" `Quick (fun _switch () ->

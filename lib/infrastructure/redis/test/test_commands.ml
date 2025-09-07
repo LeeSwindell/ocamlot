@@ -2446,6 +2446,61 @@ let xgroup_command_tests =
       (fun () -> xgroup_destroy "mystream" "mygroup")
       (xgroup_destroy "mystream" "mygroup") ]
 
+(* XACK Commands *)
+let xack_command_tests =
+  [ test_command_serialization "xack single id"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACK")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*4\r\n$4\r\nXACK\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$15\r\n1526985054069-0\r\n"
+
+  ; test_command_serialization "xack multiple ids"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACK")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "1526985054069-0")
+             ; BulkString (Some "1526985055000-1") ] ) )
+      "*5\r\n$4\r\nXACK\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$15\r\n1526985054069-0\r\n$15\r\n1526985055000-1\r\n"
+
+  ; test_command_serialization "xack empty ids list"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACK")
+             ; BulkString (Some "mystream")  
+             ; BulkString (Some "mygroup") ] ) )
+      "*3\r\n$4\r\nXACK\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n"
+
+  ; test_command_serialization "xack with special characters in names"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XACK")
+             ; BulkString (Some "stream:with:colons")
+             ; BulkString (Some "group-with-dashes")
+             ; BulkString (Some "1526985054069-0") ] ) )
+      "*4\r\n$4\r\nXACK\r\n$18\r\nstream:with:colons\r\n$17\r\ngroup-with-dashes\r\n$15\r\n1526985054069-0\r\n"
+
+  (* Roundtrip tests *)
+  ; test_command_roundtrip "xack single id roundtrip"
+      (fun () -> xack "mystream" "mygroup" ["1526985054069-0"])
+      (xack "mystream" "mygroup" ["1526985054069-0"])
+
+  ; test_command_roundtrip "xack multiple ids roundtrip"
+      (fun () -> xack "mystream" "mygroup" ["1526985054069-0"; "1526985055000-1"])
+      (xack "mystream" "mygroup" ["1526985054069-0"; "1526985055000-1"])
+
+  ; test_command_roundtrip "xack empty ids roundtrip"
+      (fun () -> xack "mystream" "mygroup" [])
+      (xack "mystream" "mygroup" []) ]
+
 (* XDEL Commands *)
 let xdel_command_tests =
   [ test_command_serialization "xdel single entry"
@@ -2685,7 +2740,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ xack_command_tests @ xdel_command_tests @ xtrim_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)
