@@ -557,7 +557,73 @@ let integration_stream_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 
+let test_xgroup_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_xgroup_stream_" ^ string_of_int (Random.int 10000) in
+        let group_name1 = "test_group1_" ^ string_of_int (Random.int 1000) in
+        let group_name2 = "test_group2_" ^ string_of_int (Random.int 1000) in
+        let group_name3 = "test_group3_" ^ string_of_int (Random.int 1000) in
+        
+        (* First add some data to create the stream *)
+        let* add_result = Client.execute client 
+          (Ocamlot_infrastructure_redis.Commands.xadd stream_name "*" [("field1", "value1")] ()) in
+        match add_result with
+        | Error e -> Lwt.return (Error e)
+        | Ok _ ->
+            (* Test 1: XGROUP CREATE basic *)
+            let* create_result = Client.xgroup_create client stream_name group_name1 "0-0" () in
+            match create_result with
+            | Error e -> Lwt.return (Error e)
+            | Ok () ->
+                (* Test 2: XGROUP CREATE with MKSTREAM (should create non-existent stream) *)
+                let nonexistent_stream = "nonexistent_stream_" ^ string_of_int (Random.int 10000) in
+                let* mkstream_result = Client.xgroup_create client nonexistent_stream group_name2 "$" ~mkstream:true () in
+                match mkstream_result with
+                | Error e -> Lwt.return (Error e)
+                | Ok () ->
+                    (* Test 3: XGROUP CREATE with ENTRIESREAD *)
+                    let* entriesread_result = Client.xgroup_create client stream_name group_name3 "0-0" ~entriesread:100 () in
+                    match entriesread_result with
+                    | Error e -> Lwt.return (Error e)
+                    | Ok () ->
+                        (* Test 4: XGROUP DESTROY existing group *)
+                        let* destroy_result1 = Client.xgroup_destroy client stream_name group_name1 in
+                        match destroy_result1 with
+                        | Error e -> Lwt.return (Error e)
+                        | Ok destroyed1 ->
+                            if not destroyed1 then 
+                              Lwt.return (Error (Client.Redis_error "Expected group to be destroyed"))
+                            else
+                              (* Test 5: XGROUP DESTROY non-existent group *)
+                              let* destroy_result2 = Client.xgroup_destroy client stream_name group_name1 in
+                              match destroy_result2 with
+                              | Error e -> Lwt.return (Error e)
+                              | Ok destroyed2 ->
+                                  if destroyed2 then 
+                                    Lwt.return (Error (Client.Redis_error "Expected group to not exist"))
+                                  else
+                                    (* Cleanup: destroy remaining groups *)
+                                    let* _cleanup1 = Client.xgroup_destroy client stream_name group_name3 in
+                                    let* _cleanup2 = Client.xgroup_destroy client nonexistent_stream group_name2 in
+                                    Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XGROUP operations failed: %s" (show_client_error e))
+
+let integration_xgroup_tests =
+  if check_redis_available () then
+    [test_case "xgroup operations (CREATE/DESTROY)" `Quick test_xgroup_operations]
+  else
+    [ test_case "xgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit ) ]
+
 (* Combined integration tests *)
 let all_integration_tests =
   integration_ping_tests @ integration_string_tests @ integration_hash_tests
   @ integration_list_tests @ integration_info_tests @ integration_stream_tests
+  @ integration_xgroup_tests

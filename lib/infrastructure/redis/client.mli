@@ -96,6 +96,23 @@ val xreadgroup : t -> string -> string -> ?count:int -> ?block:int -> ?noack:boo
     - streams: list of {key; id} where id is ">" for new messages or specific ID for pending
     Returns [(stream_name, entries)] for streams with new data delivered to this consumer *)
 
+(** {1 Consumer Group Operations} *)
+
+val xgroup_create : t -> string -> string -> string -> ?mkstream:bool -> ?entriesread:int -> unit -> (unit, client_error) result Lwt.t
+(** Create a consumer group for a stream.
+    - key: stream name
+    - groupname: consumer group name  
+    - id: starting message ID ("0-0" for all messages, "$" for new only)
+    - mkstream: if true, create the stream if it doesn't exist
+    - entriesread: approximate number of entries read by group (for lag tracking)
+    Returns unit on success *)
+
+val xgroup_destroy : t -> string -> string -> (bool, client_error) result Lwt.t
+(** Destroy a consumer group for a stream.
+    - key: stream name
+    - groupname: consumer group name
+    Returns true if group was destroyed, false if group didn't exist *)
+
 (** {1 Low-level Operations} *)
 
 val execute :

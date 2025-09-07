@@ -382,3 +382,29 @@ let xreadgroup client group_name consumer ?count ?block ?noack streams =
         (Error
            (Parse_error
               ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
+(* XGROUP operations *)
+let xgroup_create client key groupname id ?mkstream ?entriesread () =
+  let command = Commands.xgroup_create key groupname id ?mkstream ?entriesread () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.SimpleString "OK") -> Lwt.return (Ok ())
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error ("Expected OK, got " ^ Resp3.show_resp_value resp))
+        )
+
+let xgroup_destroy client key groupname =
+  let command = Commands.xgroup_destroy key groupname in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Integer 1L) -> Lwt.return (Ok true) (* group destroyed *)
+  | Ok (Resp3.Integer 0L) -> Lwt.return (Ok false) (* group didn't exist *)
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )

@@ -1240,25 +1240,37 @@ let xreadgroup group_name consumer ?count ?block ?noack streams =
   let final_cmd = cmd_with_noack @ streams_section in
   Array (Some final_cmd)
 
-(** XGROUP CREATE key groupname id [MKSTREAM] - Create consumer group *)
-let xgroup_create key groupname id ?mkstream () =
+(** XGROUP CREATE key groupname id [MKSTREAM] [ENTRIESREAD entries-read] - Create consumer group *)
+let xgroup_create key groupname id ?mkstream ?entriesread () =
   let base_cmd = 
     [BulkString (Some "XGROUP"); 
      BulkString (Some "CREATE"); 
      BulkString (Some key); 
      BulkString (Some groupname);
      BulkString (Some id)] in
+  
+  (* Add ENTRIESREAD if specified *)
+  let cmd_with_entriesread = 
+    match entriesread with
+    | Some count -> base_cmd @ [BulkString (Some "ENTRIESREAD"); BulkString (Some (string_of_int count))]
+    | None -> base_cmd
+  in
+  
+  (* Add MKSTREAM if specified (must be last) *)
   let final_cmd = 
     match mkstream with
-    | Some true -> base_cmd @ [BulkString (Some "MKSTREAM")]
-    | _ -> base_cmd
+    | Some true -> cmd_with_entriesread @ [BulkString (Some "MKSTREAM")]
+    | _ -> cmd_with_entriesread
   in
   Array (Some final_cmd)
 
 (** XGROUP DESTROY key groupname - Destroy consumer group *)
-let xgroup_destroy _key _groupname =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xgroup_destroy key groupname =
+  Array (Some 
+    [BulkString (Some "XGROUP"); 
+     BulkString (Some "DESTROY"); 
+     BulkString (Some key); 
+     BulkString (Some groupname)])
 
 (** XDEL key ID [ID ...] - Delete stream entries *)
 let xdel _key _ids =

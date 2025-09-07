@@ -2364,6 +2364,88 @@ let stream_command_tests =
       (fun () -> xreadgroup "group" "consumer" ~count:5 ~block:1000 ~noack:true [{key="stream1"; id=">"}; {key="stream2"; id="0"}])
       (xreadgroup "group" "consumer" ~count:5 ~block:1000 ~noack:true [{key="stream1"; id=">"}; {key="stream2"; id="0"}]) ]
 
+(* XGROUP Commands *)
+let xgroup_command_tests =
+  [ test_command_serialization "xgroup create basic"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "CREATE")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "0-0") ] ) )
+      "*5\r\n$6\r\nXGROUP\r\n$6\r\nCREATE\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$3\r\n0-0\r\n"
+
+  ; test_command_serialization "xgroup create with mkstream"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "CREATE")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "$")
+             ; BulkString (Some "MKSTREAM") ] ) )
+      "*6\r\n$6\r\nXGROUP\r\n$6\r\nCREATE\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$1\r\n$\r\n$8\r\nMKSTREAM\r\n"
+
+  ; test_command_serialization "xgroup create with entriesread"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "CREATE")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "0-0")
+             ; BulkString (Some "ENTRIESREAD")
+             ; BulkString (Some "100") ] ) )
+      "*7\r\n$6\r\nXGROUP\r\n$6\r\nCREATE\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$3\r\n0-0\r\n$11\r\nENTRIESREAD\r\n$3\r\n100\r\n"
+
+  ; test_command_serialization "xgroup create with entriesread and mkstream"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "CREATE")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup")
+             ; BulkString (Some "$")
+             ; BulkString (Some "ENTRIESREAD")
+             ; BulkString (Some "50")
+             ; BulkString (Some "MKSTREAM") ] ) )
+      "*8\r\n$6\r\nXGROUP\r\n$6\r\nCREATE\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n$1\r\n$\r\n$11\r\nENTRIESREAD\r\n$2\r\n50\r\n$8\r\nMKSTREAM\r\n"
+
+  ; test_command_serialization "xgroup destroy"
+      (fun () ->
+        Array
+          (Some
+             [ BulkString (Some "XGROUP")
+             ; BulkString (Some "DESTROY")
+             ; BulkString (Some "mystream")
+             ; BulkString (Some "mygroup") ] ) )
+      "*4\r\n$6\r\nXGROUP\r\n$7\r\nDESTROY\r\n$8\r\nmystream\r\n$7\r\nmygroup\r\n"
+
+  ; test_command_roundtrip "xgroup create basic roundtrip"
+      (fun () -> xgroup_create "mystream" "mygroup" "0-0" ())
+      (xgroup_create "mystream" "mygroup" "0-0" ())
+
+  ; test_command_roundtrip "xgroup create with mkstream roundtrip"
+      (fun () -> xgroup_create "mystream" "mygroup" "$" ~mkstream:true ())
+      (xgroup_create "mystream" "mygroup" "$" ~mkstream:true ())
+
+  ; test_command_roundtrip "xgroup create with entriesread roundtrip"
+      (fun () -> xgroup_create "mystream" "mygroup" "0-0" ~entriesread:100 ())
+      (xgroup_create "mystream" "mygroup" "0-0" ~entriesread:100 ())
+
+  ; test_command_roundtrip "xgroup create all options roundtrip"
+      (fun () -> xgroup_create "mystream" "mygroup" "$" ~mkstream:true ~entriesread:50 ())
+      (xgroup_create "mystream" "mygroup" "$" ~mkstream:true ~entriesread:50 ())
+
+  ; test_command_roundtrip "xgroup destroy roundtrip"
+      (fun () -> xgroup_destroy "mystream" "mygroup")
+      (xgroup_destroy "mystream" "mygroup") ]
+
 (* Pub/Sub Commands *)
 let pubsub_command_tests =
   [ test_command_serialization "publish command"
@@ -2421,7 +2503,7 @@ let all_comprehensive_tests =
   connection_server_tests @ key_management_tests @ string_command_tests
   @ hash_command_tests @ list_command_tests @ redis_set_command_tests
   @ sorted_set_command_tests @ bitmap_command_tests
-  @ hyperloglog_command_tests @ stream_command_tests @ pubsub_command_tests
+  @ hyperloglog_command_tests @ stream_command_tests @ xgroup_command_tests @ pubsub_command_tests
   @ transaction_command_tests
 
 (* Combined canonical tests *)
