@@ -446,6 +446,64 @@ let xgroup_setid client key groupname id ?entriesread () =
            (Parse_error
               ("Expected SimpleString OK, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XINFO CONSUMERS data types and operations *)
+type consumer_info = {
+  name: string;
+  pending: int;
+  idle: int;
+  inactive: int option; (* Available since Redis 7.2.0 *)
+}
+
+let parse_consumer_info_array arr =
+  let rec parse_pairs acc = function
+    | (Resp3.BulkString (Some "name")) :: (Resp3.BulkString (Some name)) :: rest ->
+        parse_pairs (("name", name) :: acc) rest
+    | (Resp3.BulkString (Some "pending")) :: (Resp3.Integer pending) :: rest ->
+        parse_pairs (("pending", Int64.to_string pending) :: acc) rest  
+    | (Resp3.BulkString (Some "idle")) :: (Resp3.Integer idle) :: rest ->
+        parse_pairs (("idle", Int64.to_string idle) :: acc) rest
+    | (Resp3.BulkString (Some "inactive")) :: (Resp3.Integer inactive) :: rest ->
+        parse_pairs (("inactive", Int64.to_string inactive) :: acc) rest
+    | [] -> Ok (List.rev acc)
+    | _ -> Error "Invalid consumer info format"
+  in
+  match parse_pairs [] arr with
+  | Ok pairs ->
+      let name = List.assoc_opt "name" pairs |> Option.value ~default:"" in
+      let pending = List.assoc_opt "pending" pairs |> Option.value ~default:"0" |> int_of_string in
+      let idle = List.assoc_opt "idle" pairs |> Option.value ~default:"0" |> int_of_string in
+      let inactive = List.assoc_opt "inactive" pairs |> Option.map int_of_string in
+      Ok { name; pending; idle; inactive }
+  | Error msg -> Error msg
+
+let xinfo_consumers client key groupname =
+  let command = Commands.xinfo_consumers key groupname in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Array (Some consumers)) ->
+      let parse_consumer = function
+        | Resp3.Array (Some consumer_data) ->
+            parse_consumer_info_array consumer_data
+        | resp ->
+            Error ("Expected Array for consumer, got " ^ Resp3.show_resp_value resp)
+      in
+      (match List.fold_right (fun consumer acc ->
+         match acc with
+         | Error e -> Error e
+         | Ok consumers_acc ->
+             match parse_consumer consumer with
+             | Ok consumer_info -> Ok (consumer_info :: consumers_acc)
+             | Error e -> Error e
+       ) consumers (Ok []) with
+       | Ok consumer_list -> Lwt.return (Ok consumer_list)
+       | Error e -> Lwt.return (Error (Parse_error e)))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Array, got " ^ Resp3.show_resp_value resp) ) )
+
 (* XACK operations *)
 let xack client key group_name ids =
   let command = Commands.xack key group_name ids in

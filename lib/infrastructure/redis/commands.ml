@@ -1405,6 +1405,15 @@ let xgroup_setid key groupname id ?entriesread () =
   in
   Array (Some cmd_with_entriesread)
 
+(** XINFO CONSUMERS key group - Return information about the consumers of a consumer group *)
+let xinfo_consumers key groupname =
+  Array (Some [
+    BulkString (Some "XINFO");
+    BulkString (Some "CONSUMERS");
+    BulkString (Some key);
+    BulkString (Some groupname)
+  ])
+
 (** XDEL key ID [ID ...] - Delete stream entries *)
 let xdel key ids =
   let base_cmd = [BulkString (Some "XDEL"); BulkString (Some key)] in

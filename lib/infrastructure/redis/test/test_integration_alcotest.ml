@@ -1580,12 +1580,99 @@ let test_xgroup_setid_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XGROUP SETID operations failed: %s" (show_client_error e))
 
+(* XINFO CONSUMERS Pipeline Test Functions *)
+let test_xinfo_consumers_basic stream_name group_name expected_consumer_names state =
+  let* result = Client.xinfo_consumers state.client stream_name group_name in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok consumer_list ->
+      let found_names = List.map (fun c -> c.Client.name) consumer_list |> List.sort String.compare in
+      let expected_names_sorted = List.sort String.compare expected_consumer_names in
+      if found_names <> expected_names_sorted then
+        Lwt.return (Error (Client.Redis_error 
+          (Printf.sprintf "Expected consumers [%s], got [%s]" 
+            (String.concat "; " expected_names_sorted) 
+            (String.concat "; " found_names))))
+      else
+        return_ok () state
+
+let test_xinfo_consumers_pending_count stream_name group_name consumer_name expected_pending state =
+  let* result = Client.xinfo_consumers state.client stream_name group_name in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok consumer_list ->
+      (match List.find_opt (fun c -> c.Client.name = consumer_name) consumer_list with
+       | None -> 
+           Lwt.return (Error (Client.Redis_error (Printf.sprintf "Consumer %s not found" consumer_name)))
+       | Some consumer ->
+           if consumer.Client.pending <> expected_pending then
+             Lwt.return (Error (Client.Redis_error 
+               (Printf.sprintf "Expected %s to have %d pending messages, got %d" 
+                 consumer_name expected_pending consumer.Client.pending)))
+           else
+             return_ok () state)
+
+let test_xinfo_consumers_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_xinfo_consumers_stream_" ^ string_of_int (Random.int 10000) in
+        let group_name = "test_xinfo_consumers_group_" ^ string_of_int (Random.int 1000) in
+        
+        run_test_pipeline client [
+          (* Setup: create stream and consumer group *)
+          (fun state -> setup_clean_stream stream_name state);
+          (fun state -> add_stream_entry stream_name [("field1", "value1")] state);
+          (fun state -> add_stream_entry stream_name [("field2", "value2")] state);
+          (fun state -> add_stream_entry stream_name [("field3", "value3")] state);
+          (fun state -> create_consumer_group group_name stream_name "0" state);
+          
+          (* Test 1: XINFO CONSUMERS on empty consumer group should return empty list *)
+          (fun state -> test_xinfo_consumers_basic stream_name group_name [] state);
+          
+          (* Test 2: Create consumers and verify they appear in XINFO CONSUMERS *)
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer1" true state);
+          (fun state -> test_xgroup_createconsumer_new stream_name group_name "consumer2" true state);
+          (fun state -> test_xinfo_consumers_basic stream_name group_name ["consumer1"; "consumer2"] state);
+          
+          (* Test 3: Verify pending counts are initially 0 *)
+          (fun state -> test_xinfo_consumers_pending_count stream_name group_name "consumer1" 0 state);
+          (fun state -> test_xinfo_consumers_pending_count stream_name group_name "consumer2" 0 state);
+          
+          (* Test 4: Consume messages and verify pending counts increase *)
+          (fun state -> consume_messages_to_create_pending stream_name group_name "consumer1" 2 state);
+          (fun state -> consume_messages_to_create_pending stream_name group_name "consumer2" 1 state);
+          (fun state -> test_xinfo_consumers_pending_count stream_name group_name "consumer1" 2 state);
+          (fun state -> test_xinfo_consumers_pending_count stream_name group_name "consumer2" 1 state);
+          
+          (* Test 5: Delete a consumer and verify it's removed from XINFO CONSUMERS *)
+          (fun state -> test_xgroup_delconsumer_basic stream_name group_name "consumer1" 2 state);
+          (fun state -> test_xinfo_consumers_basic stream_name group_name ["consumer2"] state);
+          
+          (* Test 6: Test with special characters in stream/group names *)
+          (fun state -> setup_clean_stream "special:stream_name" state);
+          (fun state -> add_stream_entry "special:stream_name" [("test", "value")] state);
+          (fun state -> create_consumer_group "special-group" "special:stream_name" "0" state);
+          (fun state -> test_xgroup_createconsumer_new "special:stream_name" "special-group" "special_consumer" true state);
+          (fun state -> test_xinfo_consumers_basic "special:stream_name" "special-group" ["special_consumer"] state);
+          
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+          (fun state -> cleanup_stream "special:stream_name" state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XINFO CONSUMERS operations failed: %s" (show_client_error e))
+
 let integration_xgroup_tests =
   if check_redis_available () then
     [test_case "xgroup operations (CREATE/DESTROY)" `Quick test_xgroup_operations;
      test_case "xgroup createconsumer operations" `Quick test_xgroup_createconsumer_operations;
      test_case "xgroup delconsumer operations" `Quick test_xgroup_delconsumer_operations;
-     test_case "xgroup setid operations" `Quick test_xgroup_setid_operations]
+     test_case "xgroup setid operations" `Quick test_xgroup_setid_operations;
+     test_case "xinfo consumers operations" `Quick test_xinfo_consumers_operations]
   else
     [ test_case "xgroup operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
@@ -1597,6 +1684,9 @@ let integration_xgroup_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xgroup setid operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xinfo consumers operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 

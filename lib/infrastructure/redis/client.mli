@@ -147,6 +147,27 @@ val xgroup_setid : t -> string -> string -> string -> ?entriesread:int -> unit -
     The optional entriesread parameter enables lag tracking for arbitrary IDs.
     Available since Redis 5.0.0. *)
 
+(** {1 XINFO Operations} *)
+
+(** Consumer information returned by XINFO CONSUMERS *)
+type consumer_info = {
+  name: string;          (** Consumer name *)
+  pending: int;          (** Number of pending messages for this consumer *)
+  idle: int;             (** Milliseconds since last attempted interaction *)
+  inactive: int option;  (** Milliseconds since last successful interaction (Redis 7.2.0+) *)
+}
+
+val xinfo_consumers : t -> string -> string -> (consumer_info list, client_error) result Lwt.t
+(** Get information about consumers in a consumer group.
+    - key: stream name
+    - groupname: consumer group name
+    Returns a list of consumer information records
+    
+    Each consumer record contains the consumer name, number of pending messages,
+    idle time (milliseconds since last attempted interaction), and optionally
+    inactive time (milliseconds since last successful interaction, Redis 7.2.0+).
+    Available since Redis 5.0.0. *)
+
 val xack : t -> string -> string -> string list -> (int, client_error) result Lwt.t
 (** Acknowledge processed messages in a consumer group, removing them from the Pending Entries List (PEL).
     - key: stream name
