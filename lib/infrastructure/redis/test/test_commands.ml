@@ -1856,7 +1856,7 @@ let stream_command_tests =
        XADD\r\n\
        $8\r\n\
        mystream\r\n\
-       $9\r\n\
+       $10\r\n\
        NOMKSTREAM\r\n\
        $1\r\n\
        *\r\n\
@@ -2003,7 +2003,7 @@ let stream_command_tests =
        MINID\r\n\
        $1\r\n\
        =\r\n\
-       $16\r\n\
+       $15\r\n\
        1526919030474-0\r\n\
        $1\r\n\
        *\r\n\
@@ -2026,7 +2026,7 @@ let stream_command_tests =
        MINID\r\n\
        $1\r\n\
        ~\r\n\
-       $16\r\n\
+       $15\r\n\
        1526919030474-0\r\n\
        $1\r\n\
        *\r\n\
@@ -2047,7 +2047,7 @@ let stream_command_tests =
        XADD\r\n\
        $8\r\n\
        mystream\r\n\
-       $9\r\n\
+       $10\r\n\
        NOMKSTREAM\r\n\
        $6\r\n\
        MAXLEN\r\n\
@@ -2117,7 +2117,7 @@ let stream_command_tests =
        *\r\n\
        $7\r\n\
        field:1\r\n\
-       $17\r\n\
+       $19\r\n\
        value\n\
        with\n\
        newlines\r\n"
@@ -2161,7 +2161,24 @@ let stream_command_tests =
          [("a", "1"); ("b", "2"); ("c", "3")]
          ~ref_handling:DelRef
          ~trim_strategy:(MinId ("0-0", true))
-         ~limit:20 () ) ]
+         ~limit:20 () )
+  
+  (* XLEN tests *)
+  ; test_command_serialization "xlen basic"
+      (fun () -> xlen "mystream")
+      "*2\r\n$4\r\nXLEN\r\n$8\r\nmystream\r\n"
+  
+  ; test_command_serialization "xlen with special characters in key"
+      (fun () -> xlen "stream:123")
+      "*2\r\n$4\r\nXLEN\r\n$10\r\nstream:123\r\n"
+  
+  ; test_command_serialization "xlen with unicode key"
+      (fun () -> xlen "ストリーム")
+      "*2\r\n$4\r\nXLEN\r\n$15\r\nストリーム\r\n"
+  
+  ; test_command_roundtrip "xlen command roundtrip"
+      (fun () -> xlen "test-stream")
+      (xlen "test-stream") ]
 
 (* Pub/Sub Commands *)
 let pubsub_command_tests =

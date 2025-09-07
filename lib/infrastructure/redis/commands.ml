@@ -1128,9 +1128,8 @@ let xadd key id field_values ?nomkstream ?ref_handling ?trim_strategy ?limit
   Array (Some (cmd_with_id @ field_value_args))
 
 (** XLEN key - Get stream length *)
-let xlen _key =
-  (* TODO: Implementation *)
-  failwith "Not implemented"
+let xlen key =
+  Array (Some [BulkString (Some "XLEN"); BulkString (Some key)])
 
 (** XRANGE key start end [COUNT count] - Get stream range *)
 let xrange _key _start_id _end_id ?count:_count () =

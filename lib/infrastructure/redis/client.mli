@@ -54,6 +54,11 @@ val ping : t -> (string, client_error) result Lwt.t
 
 val info : t -> (string, client_error) result Lwt.t
 
+(** {1 Stream Operations} *)
+
+val xlen : t -> string -> (int, client_error) result Lwt.t
+(** Get the number of entries in a stream *)
+
 (** {1 Low-level Operations} *)
 
 val execute :

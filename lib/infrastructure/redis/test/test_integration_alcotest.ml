@@ -187,6 +187,56 @@ let test_info_command _switch () =
   | Error e ->
       fail (Printf.sprintf "INFO command failed: %s" (show_client_error e))
 
+let test_stream_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        (* First, clean up any existing test stream *)
+        let* _ = Client.del client ["alcotest_stream"] in
+        (* Test XLEN on non-existent stream *)
+        let* xlen_empty_result = Client.xlen client "alcotest_stream" in
+        match xlen_empty_result with
+        | Error e -> Lwt.return (Error e)
+        | Ok count -> (
+            check int_testable "XLEN on non-existent stream should return 0" 0
+              count ;
+            (* Add entries to stream using raw execute since XADD client wrapper not implemented yet *)
+            let xadd_cmd1 =
+              Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream" "*"
+                [("field1", "value1")]
+                ()
+            in
+            let* add_result1 = Client.execute client xadd_cmd1 in
+            match add_result1 with
+            | Error e -> Lwt.return (Error e)
+            | Ok _ -> (
+                (* Add another entry *)
+                let xadd_cmd2 =
+                  Ocamlot_infrastructure_redis.Commands.xadd "alcotest_stream"
+                    "*"
+                    [("field2", "value2")]
+                    ()
+                in
+                let* add_result2 = Client.execute client xadd_cmd2 in
+                match add_result2 with
+                | Error e -> Lwt.return (Error e)
+                | Ok _ -> (
+                    (* Test XLEN after adding entries *)
+                    let* xlen_result = Client.xlen client "alcotest_stream" in
+                    match xlen_result with
+                    | Error e -> Lwt.return (Error e)
+                    | Ok count ->
+                        check int_testable
+                          "XLEN after adding 2 entries should return 2" 2 count ;
+                        (* Clean up *)
+                        let* _ = Client.del client ["alcotest_stream"] in
+                        Lwt.return (Ok ()) ) ) ) )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail
+        (Printf.sprintf "Stream operations failed: %s" (show_client_error e))
+
 (* =============================================================================
    CONDITIONAL TEST SUITE DEFINITION
    ============================================================================= *)
@@ -244,7 +294,15 @@ let integration_info_tests =
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit ) ]
 
+let integration_stream_tests =
+  if check_redis_available () then
+    [test_case "stream operations (XLEN)" `Quick test_stream_operations]
+  else
+    [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit ) ]
+
 (* Combined integration tests *)
 let all_integration_tests =
   integration_ping_tests @ integration_string_tests @ integration_hash_tests
-  @ integration_list_tests @ integration_info_tests
+  @ integration_list_tests @ integration_info_tests @ integration_stream_tests

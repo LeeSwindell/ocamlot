@@ -258,3 +258,16 @@ let info client =
         (Error
            (Parse_error
               ("Expected BulkString, got " ^ Resp3.show_resp_value resp) ) )
+
+(* Stream operations *)
+let xlen client key =
+  let command = Commands.xlen key in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.Integer count) -> Lwt.return (Ok (Int64.to_int count))
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
