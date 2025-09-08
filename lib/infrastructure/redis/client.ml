@@ -272,6 +272,21 @@ let xlen client key =
            (Parse_error
               ("Expected Integer, got " ^ Resp3.show_resp_value resp) ) )
 
+(* XADD operations *)
+let xadd client key id field_values ?nomkstream ?ref_handling ?trim_strategy ?limit () =
+  let command = Commands.xadd key id field_values ?nomkstream ?ref_handling ?trim_strategy ?limit () in
+  let* result = execute client command in
+  match result with
+  | Error e -> Lwt.return (Error e)
+  | Ok (Resp3.BulkString (Some entry_id)) -> Lwt.return (Ok (Some entry_id))
+  | Ok (Resp3.BulkString None) -> Lwt.return (Ok None) (* NOMKSTREAM case *)
+  | Ok Resp3.Null -> Lwt.return (Ok None) (* NOMKSTREAM case *)
+  | Ok resp ->
+      Lwt.return
+        (Error
+           (Parse_error
+              ("Expected BulkString or Null, got " ^ Resp3.show_resp_value resp) ) )
+
 (* Type for stream entries: (entry_id * (field * value) list) *)
 type stream_entry = string * (string * string) list
 

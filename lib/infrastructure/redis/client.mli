@@ -71,6 +71,34 @@ type xread_stream = {
 val xlen : t -> string -> (int, client_error) result Lwt.t
 (** Get the number of entries in a stream *)
 
+val xadd : t -> string -> string -> (string * string) list -> ?nomkstream:bool -> ?ref_handling:Commands.xadd_ref_handling -> ?trim_strategy:Commands.xadd_trim_strategy -> ?limit:int -> unit -> (string option, client_error) result Lwt.t
+(** Add an entry to a stream. 
+    
+    Parameters:
+    - key: stream name
+    - id: entry ID (use "*" for auto-generation, or "ms-seq" format)
+    - field_values: list of field-value pairs (must have at least one)
+    - nomkstream: if true, don't create stream if it doesn't exist (Redis 6.2.0+)
+    - ref_handling: how to handle consumer group references during trimming (Redis 8.2.0+)
+      * KeepRef (default): preserve PEL references when trimming
+      * DelRef: remove PEL references when trimming  
+      * Acked: only remove acknowledged entries when trimming
+    - trim_strategy: trimming strategy (Redis 5.0.0+)
+      * MaxLen (count, approximate): limit to max number of entries
+      * MinId (id, approximate): remove entries older than ID (Redis 6.2.0+)
+    - limit: limit number of entries examined during trimming (Redis 6.2.0+)
+    
+    Returns:
+    - Some entry_id: the ID of the added entry (auto-generated if "*" was used)
+    - None: if NOMKSTREAM was used and the key doesn't exist
+    
+    Examples:
+    - Basic: xadd client "mystream" "*" [("field1", "value1")] ()
+    - Manual ID: xadd client "mystream" "1526919030474-0" [("msg", "hello")] ()
+    - No create: xadd client "stream" "*" [("f", "v")] ~nomkstream:true ()
+    - With trim: xadd client "stream" "*" [("f", "v")] ~trim_strategy:(MaxLen (1000, true)) ()
+    - Clean trim: xadd client "stream" "*" [("f", "v")] ~ref_handling:DelRef ~trim_strategy:(MaxLen (100, false)) () *)
+
 val xrange : t -> string -> string -> string -> ?count:int -> unit -> (stream_entry list, client_error) result Lwt.t
 (** Get stream entries in a range. Use "-" and "+" for min/max IDs. 
     Returns list of (entry_id, field_value_pairs) *)

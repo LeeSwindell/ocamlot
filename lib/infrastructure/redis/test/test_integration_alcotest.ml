@@ -1278,9 +1278,106 @@ let test_xtrim_operations _switch () =
   | Error e ->
       fail (Printf.sprintf "XTRIM operations failed: %s" (show_client_error e))
 
+(* XADD integration tests *)
+let test_xadd_operations _switch () =
+  let* result =
+    Client.with_client test_config (fun client ->
+        let stream_name = "test_xadd_stream_" ^ string_of_int (Random.int 10000) in
+        
+        run_test_pipeline client [
+          (* Setup: ensure clean stream *)
+          (fun state -> setup_clean_stream stream_name state);
+          
+          (* Test 1: Basic XADD with auto-generated ID *)
+          (fun state ->
+            let* result = Client.xadd state.client stream_name "*" [("field1", "value1")] () in
+            match result with
+            | Error e -> Lwt.return (Error e)
+            | Ok (Some entry_id) ->
+                (* Verify entry was added and ID looks correct *)
+                if String.contains entry_id '-' then
+                  return_ok () state
+                else
+                  Lwt.return (Error (Client.Parse_error ("Invalid entry ID format: " ^ entry_id)))
+            | Ok None -> Lwt.return (Error (Client.Parse_error "Expected entry ID, got None")));
+          
+          (* Test 2: XADD with multiple fields *)
+          (fun state ->
+            let* result = Client.xadd state.client stream_name "*" [("name", "John"); ("age", "30"); ("city", "NYC")] () in
+            match result with
+            | Error e -> Lwt.return (Error e)
+            | Ok (Some _) -> return_ok () state
+            | Ok None -> Lwt.return (Error (Client.Parse_error "Expected entry ID for multi-field add")));
+          
+          (* Test 3: Verify stream length increased *)
+          (fun state ->
+            let* result = Client.xlen state.client stream_name in
+            match result with
+            | Error e -> Lwt.return (Error e)
+            | Ok len ->
+                if len >= 2 then return_ok () state
+                else Lwt.return (Error (Client.Parse_error (Printf.sprintf "Expected stream length >= 2, got %d" len))));
+          
+          (* Test 4: XADD with manual ID *)
+          (fun state ->
+            let manual_id = string_of_int (int_of_float (Unix.time ()) * 1000 + 999999) ^ "-999" in
+            let* result = Client.xadd state.client stream_name manual_id [("manual", "entry")] () in
+            match result with
+            | Error e -> Lwt.return (Error e)
+            | Ok (Some returned_id) ->
+                if returned_id = manual_id then return_ok () state
+                else Lwt.return (Error (Client.Parse_error (Printf.sprintf "Expected manual ID %s, got %s" manual_id returned_id)))
+            | Ok None -> Lwt.return (Error (Client.Parse_error "Expected manual entry ID, got None")));
+          
+          (* Test 5: NOMKSTREAM with non-existent stream *)
+          (fun state ->
+            let nonexistent_stream = "nonexistent_stream_" ^ string_of_int (Random.int 10000) in
+            let* result = Client.xadd state.client nonexistent_stream "*" [("test", "nomkstream")] ~nomkstream:true () in
+            match result with
+            | Error e -> Lwt.return (Error e)
+            | Ok None -> return_ok () state (* Expected: stream doesn't exist and wasn't created *)
+            | Ok (Some _) -> Lwt.return (Error (Client.Parse_error "NOMKSTREAM should return None for non-existent stream")));
+          
+          (* Test 6: XADD with trimming using MAXLEN *)
+          (fun state ->
+            let trim_stream = "trim_test_stream_" ^ string_of_int (Random.int 10000) in
+            (* Add entry with MAXLEN=1 trimming *)
+            let* result = Client.xadd state.client trim_stream "*" [("trimmed", "entry")] 
+                ~trim_strategy:(Ocamlot_infrastructure_redis.Commands.MaxLen (1, false)) () in
+            match result with
+            | Error e -> Lwt.return (Error e)
+            | Ok (Some _) ->
+                (* Verify stream length is limited to 1 *)
+                let* len_result = Client.xlen state.client trim_stream in
+                (match len_result with
+                 | Error e -> Lwt.return (Error e)
+                 | Ok len ->
+                     if len = 1 then return_ok () state
+                     else Lwt.return (Error (Client.Parse_error (Printf.sprintf "Expected trimmed stream length 1, got %d" len))))
+            | Ok None -> Lwt.return (Error (Client.Parse_error "Expected entry ID for trimmed add")));
+          
+          (* Test 7: Error case - empty field_values list should fail at Redis level *)
+          (fun state ->
+            let* result = Client.xadd state.client stream_name "*" [] () in
+            match result with
+            | Error (Client.Redis_error _) -> return_ok () state (* Expected: Redis should reject empty fields *)
+            | Error e -> Lwt.return (Error e) (* Unexpected error *)
+            | Ok _ -> Lwt.return (Error (Client.Parse_error "Expected Redis error for empty field_values")));
+          
+          (* Cleanup *)
+          (fun state -> cleanup_stream stream_name state);
+        ] >>=? fun _ _ -> Lwt.return (Ok ())
+    )
+  in
+  match result with
+  | Ok () -> Lwt.return_unit
+  | Error e ->
+      fail (Printf.sprintf "XADD operations failed: %s" (show_client_error e))
+
 let integration_stream_tests =
   if check_redis_available () then
     [test_case "stream operations (XLEN, XRANGE, XREVRANGE)" `Quick test_stream_operations;
+     test_case "xadd operations" `Quick test_xadd_operations;
      test_case "xread operations" `Quick test_xread_operations_new;
      test_case "xreadgroup operations" `Quick test_xreadgroup_operations;
      test_case "xack operations" `Quick test_xack_operations;
@@ -1292,6 +1389,9 @@ let integration_stream_tests =
      test_case "xtrim operations" `Quick test_xtrim_operations]
   else
     [ test_case "stream operations (skipped - no Redis)" `Quick (fun _switch () ->
+          Printf.printf "Skipping integration test: Redis not available\n" ;
+          Lwt.return_unit );
+      test_case "xadd operations (skipped - no Redis)" `Quick (fun _switch () ->
           Printf.printf "Skipping integration test: Redis not available\n" ;
           Lwt.return_unit );
       test_case "xread operations (skipped - no Redis)" `Quick (fun _switch () ->
